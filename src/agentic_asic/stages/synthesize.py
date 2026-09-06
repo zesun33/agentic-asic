@@ -56,9 +56,18 @@ def run_synthesize_stage(
         latch_res = session.call_tool("yosys_check_latch", latch_args)
         inferred_latches: List[str] = []
         if isinstance(latch_res, dict):
-            inferred_latches = latch_res.get("inferred_latches", [])
-            if not inferred_latches and latch_res.get("latch_count", 0) > 0:
-                inferred_latches = [f"Latch count: {latch_res['latch_count']}"]
+            has_latches = latch_res.get("hasLatches", False) or latch_res.get("has_latches", False)
+            raw_latches = latch_res.get("latches") or latch_res.get("inferred_latches") or []
+            if isinstance(raw_latches, list):
+                for item in raw_latches:
+                    if isinstance(item, dict):
+                        inferred_latches.append(
+                            f"{item.get('module', '')}.{item.get('variable', '')} [Line {item.get('line', '?')}]"
+                        )
+                    else:
+                        inferred_latches.append(str(item))
+            if not inferred_latches and has_latches:
+                inferred_latches = ["Inferred transparent latch detected"]
 
         if inferred_latches and not allow_latches:
             return SynthStageResult(
@@ -66,6 +75,7 @@ def run_synthesize_stage(
                 passed=False,
                 target=target,
                 inferred_latches=inferred_latches,
+                diagnostics=[f"Latch detected: {l}" for l in inferred_latches],
                 details={"latch_check": latch_res},
                 error_message=f"Synthesis aborted: Inferred {len(inferred_latches)} latch(es) detected: {', '.join(inferred_latches)}",
             )
@@ -94,6 +104,8 @@ def run_synthesize_stage(
         cell_counts = synth_res.get("cellsByType") or synth_res.get("cell_counts") or {}
         total_cells = synth_res.get("cellCount") or synth_res.get("total_cells") or sum(cell_counts.values()) if cell_counts else 0
         netlist_path = synth_res.get("netlistPath") or synth_res.get("output_netlist") or output_netlist
+        if netlist_path and cwd and not os.path.isabs(netlist_path):
+            netlist_path = os.path.join(cwd, netlist_path)
 
         return SynthStageResult(
             stage_name="synthesize",

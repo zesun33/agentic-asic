@@ -61,6 +61,43 @@ class TestASICIntegration(unittest.TestCase):
         self.assertEqual(out["failing_stage"], "review")
         self.assertFalse(out["results"]["review"].passed)
 
+    def test_pipeline_halts_on_inferred_latch(self):
+        latch_v = os.path.join(FIXTURES_DIR, "latch_demo.v")
+        pipeline = ASICPipeline(work_dir=self.temp_dir)
+        out = pipeline.run(
+            verilog_sources=[latch_v],
+            top_module="latch_demo",
+            do_pnr=False,
+        )
+        self.assertFalse(out["success"])
+        self.assertEqual(out["failing_stage"], "synthesize")
+        synth_res = out["results"]["synthesize"]
+        self.assertFalse(synth_res.passed)
+        self.assertGreater(len(synth_res.inferred_latches), 0)
+
+    def test_full_pipeline_on_alu(self):
+        alu_v = os.path.join(FIXTURES_DIR, "alu.v")
+        alu_tb = os.path.join(FIXTURES_DIR, "alu_tb.v")
+        pipeline = ASICPipeline(
+            work_dir=self.temp_dir,
+            clock_period_ns=2.0,
+            core_utilization=0.35,
+            target_pdk="generic",
+        )
+        out = pipeline.run(
+            verilog_sources=[alu_v],
+            top_module="alu",
+            testbench=alu_tb,
+            do_pnr=True,
+        )
+        self.assertTrue(out["success"], f"ALU Pipeline failed: {out.get('failing_stage')}")
+        results = out["results"]
+        self.assertTrue(results["review"].passed)
+        self.assertTrue(results["simulate"].passed)
+        self.assertTrue(results["synthesize"].passed)
+        self.assertGreater(results["synthesize"].total_cells, 100)
+        self.assertTrue(results["pnr"].passed)
+
 
 if __name__ == "__main__":
     unittest.main()

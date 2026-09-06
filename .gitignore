@@ -19,3 +19,5 @@ out/
 tmp/
 transcripts/demo_run/
 *.vvp
+*_synth.v
+*_routed.def
