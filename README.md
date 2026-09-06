@@ -1,6 +1,7 @@
 # agentic-asic
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/zesun33/agentic-asic/actions/workflows/ci.yml/badge.svg)](https://github.com/zesun33/agentic-asic/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-Model_Context_Protocol-6B46C1.svg)](https://modelcontextprotocol.io)
 [![Status](https://img.shields.io/badge/Status-Phase_4_Production_Ready-brightgreen.svg)](#)
@@ -129,7 +130,11 @@ When physical design faces timing violations ($WNS < 0$) or placement congestion
 `agentic-asic` strictly adheres to the multi-gate engineering standard defined in [`hw-agent-tooling`](https://github.com/zesun33/hw-agent-tooling):
 
 ```bash
+# Full verification (with live multi-stage container pipeline)
 ./scripts/verify.sh
+
+# Fast / CI verification (headless environments)
+./scripts/verify.sh --quick
 ```
 - **Gate 1**: Spec Lock & Package Integrity (`pyproject.toml`, `README.md`, `LICENSE`, `CHANGELOG.md`)
 - **Gate 2**: Static Quality & Syntax Check (`py_compile`)
