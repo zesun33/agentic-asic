@@ -1,0 +1,40 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify.sh --quick
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Create mock MCP server stubs
+        run: |
+          for s in mcp-rtl-review mcp-verilog mcp-cocotb mcp-yosys mcp-openroad; do
+            mkdir -p ../$s/dist
+            touch ../$s/dist/index.js
+          done
+
+      - name: Run verify.sh --quick
+        run: bash scripts/verify.sh --quick
