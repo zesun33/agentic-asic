@@ -43,7 +43,7 @@ class ASICPipeline:
         work_dir: Optional[str] = None,
         clock_period_ns: float = 2.0,
         core_utilization: float = 0.35,
-        target_pdk: str = "generic",
+        target_pdk: str = "nangate45",
         min_review_score: int = 70,
     ):
         self.work_dir = os.path.abspath(work_dir or os.getcwd())
