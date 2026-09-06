@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-asic"
+version = "0.1.0"
+description = "Autonomous Silicon Compilation & Verification Orchestrator powered by EDA MCP Servers"
+readme = "README.md"
+authors = [{ name = "Md Zesun Ahmed Mia", email = "zesun33@users.noreply.github.com" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.scripts]
+agentic-asic = "agentic_asic.cli:main"
+asic = "agentic_asic.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
