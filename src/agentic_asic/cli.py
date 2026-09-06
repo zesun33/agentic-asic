@@ -170,7 +170,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_run.add_argument("--tb", type=str, help="Testbench file (.v or .py for cocotb)")
     p_run.add_argument("--sdc", type=str, help="SDC timing constraints file")
     p_run.add_argument("--period", type=float, default=2.0, help="Target clock period in ns (default: 2.0)")
-    p_run.add_argument("--util", type=float, default=0.35, help="Core placement utilization (default: 0.35)")
+    p_run.add_argument("--util", type=float, default=0.70, help="Core placement utilization (default: 0.70)")
     p_run.add_argument("--target", type=str, default="nangate45", choices=["generic", "ice40", "sky130", "nangate45"], help="PDK target (default: nangate45)")
     p_run.add_argument("--no-pnr", action="store_true", help="Skip physical design stage")
     p_run.add_argument("--json", action="store_true", help="Emit JSON signoff report to stdout")

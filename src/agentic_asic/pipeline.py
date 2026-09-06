@@ -42,7 +42,7 @@ class ASICPipeline:
         self,
         work_dir: Optional[str] = None,
         clock_period_ns: float = 2.0,
-        core_utilization: float = 0.35,
+        core_utilization: float = 0.70,
         target_pdk: str = "nangate45",
         min_review_score: int = 70,
     ):

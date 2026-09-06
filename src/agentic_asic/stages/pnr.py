@@ -23,7 +23,7 @@ def run_pnr_stage(
     netlist_file: str,
     top_module: str,
     clock_period_ns: float = 2.0,
-    core_utilization: float = 0.35,
+    core_utilization: float = 0.70,
     output_def: Optional[str] = None,
     sdc_file: Optional[str] = None,
     cwd: Optional[str] = None,
