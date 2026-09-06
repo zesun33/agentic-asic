@@ -48,7 +48,7 @@ flowchart TD
 | Stage | EDA Server | Underlying Engines | Purpose & Signoff Gate |
 | :--- | :--- | :--- | :--- |
 | **1. AST Review** | [`@zesun33/mcp-rtl-review`](https://github.com/zesun33/mcp-rtl-review) | AST Semantic Parser | 0–100 quality score, blocking assignment triage, unclocked register audit. |
-| **2. Simulation** | [`@zesun33/mcp-verilog`](https://github.com/zesun33/mcp-verilog) / [`cocotb`](https://github.com/zesun33/mcp-cocotb) | Icarus Verilog + VVP / Cocotb | Behavioral regression testbenches, assertions ($fatal), and waveform inspection. |
+| **2. Simulation** | [`@zesun33/mcp-verilog`](https://github.com/zesun33/mcp-verilog) / [`cocotb`](https://github.com/zesun33/mcp-cocotb) | Icarus Verilog + VVP / Cocotb | Behavioral regression testbenches, assertions (`$fatal`), and waveform inspection. |
 | **3. Logic Synth** | [`@zesun33/mcp-yosys`](https://github.com/zesun33/mcp-yosys) | Yosys 0.38+ / ABC | Gate technology mapping, transparent latch prevention, cell count profiling. |
 | **4. Physical P&R** | [`@zesun33/mcp-openroad`](https://github.com/zesun33/mcp-openroad) | OpenROAD 2.0 (Nangate45 / Sky130) | Floorplanning, global/detailed placement, CTS, routing, and STA timing closure. |
 
@@ -118,9 +118,9 @@ asic run fixtures/counter.v --json
 
 ## Closed-Loop Self-Healing
 
-When physical design faces timing violations ($WNS < 0$) or placement congestion, `agentic-asic` automatically calculates relaxation parameters:
-1. **Congestion Relaxation**: Dynamically reduces `core_utilization` (e.g. $0.45 \to 0.35$) and re-invokes placement.
-2. **Timing Slack Relaxation**: Automatically recalculates clock periods based on the Worst Negative Slack ($WNS$) margin.
+When physical design faces timing violations (`WNS < 0`) or placement congestion, `agentic-asic` automatically calculates relaxation parameters:
+1. **Congestion Relaxation**: Dynamically reduces `core_utilization` (e.g. 0.45 → 0.35) and re-invokes placement.
+2. **Timing Slack Relaxation**: Automatically recalculates clock periods based on the Worst Negative Slack (WNS) margin.
 3. **LLM Diagnostic Prompting**: Generates actionable, structured prompts formatted with exact source lines and AST diagnostics for autonomous code repair by language models.
 
 ---
