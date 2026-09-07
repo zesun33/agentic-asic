@@ -93,7 +93,7 @@ class SignoffReporter:
         signoff = results.get("signoff")
         if isinstance(signoff, SignoffStageResult):
             status = "\033[1;32mPASSED\033[0m" if signoff.passed else "\033[1;31mFAILED\033[0m"
-            print(f"  {'6. GDS Signoff':<27} {status:<20} DRC findings: {signoff.drc_violations} (clean: {signoff.drc_clean})")
+            print(f"  {'6. GDS Signoff':<27} {status:<20} DRC findings: {signoff.drc_violations} (clean: {signoff.drc_clean}, LVS: {signoff.lvs_match})")
 
         if error_message:
             print(f"  Config error: {error_message}")
@@ -172,6 +172,7 @@ class SignoffReporter:
                 stages_data[name]["gds_file"] = r.gds_file
                 stages_data[name]["drc_violations"] = r.drc_violations
                 stages_data[name]["drc_clean"] = r.drc_clean
+                stages_data[name]["lvs_match"] = r.lvs_match
             elif isinstance(r, FpgaStageResult):
                 stages_data[name]["board"] = r.board
                 stages_data[name]["bitstream_file"] = r.bitstream_file
@@ -240,7 +241,7 @@ class SignoffReporter:
         signoff = results.get("signoff")
         if isinstance(signoff, SignoffStageResult):
             status = "✔ PASS" if signoff.passed else "✖ FAIL"
-            lines.append(f"| **6. GDS Signoff** | `@zesun33/mcp-gds` | `{status}` | DRC findings: {signoff.drc_violations} |")
+            lines.append(f"| **6. GDS Signoff** | `@zesun33/mcp-gds` | `{status}` | DRC findings: {signoff.drc_violations}, LVS vs synth: {signoff.lvs_match} |")
 
         lines.extend([
             "",

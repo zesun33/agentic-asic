@@ -105,6 +105,66 @@ class TestSignoffStage(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertIn("stream-out", res.error_message)
 
+    def test_pdk_forwarded_to_drc_only_when_given(self):
+        sess = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {"success": True, "violations": [], "totalViolations": 0, "clean": True},
+        })
+        res = run_signoff_stage("top_routed.def", "top", pdk="sky130A", session=sess)
+        self.assertTrue(res.passed)
+        drc_calls = [c for c in sess.calls if c[0] == "drc_klayout"]
+        self.assertEqual(len(drc_calls), 1)
+        self.assertEqual(drc_calls[0][1].get("pdk"), "sky130A")
+
+        sess2 = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {"success": True, "violations": [], "totalViolations": 0, "clean": True},
+        })
+        run_signoff_stage("top_routed.def", "top", session=sess2)
+        drc_calls2 = [c for c in sess2.calls if c[0] == "drc_klayout"]
+        self.assertNotIn("pdk", drc_calls2[0][1])
+
+    def test_extract_lvs_wiring_reports_match(self):
+        sess = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {"success": True, "violations": [], "totalViolations": 0, "clean": True},
+            "extract_magic": {"success": True, "spiceFile": "top_layout.spice"},
+            "lvs_netgen": {"success": True, "match": True},
+        })
+        res = run_signoff_stage("top_routed.def", "top", netlist_file="top_synth.v", pdk="sky130A", session=sess)
+        self.assertTrue(res.passed)
+        self.assertTrue(res.lvs_match)
+        self.assertEqual(res.layout_spice, "top_layout.spice")
+        self.assertTrue(any("LVS" in d and "MATCH" in d for d in res.diagnostics))
+        tools_called = [c[0] for c in sess.calls]
+        self.assertIn("extract_magic", tools_called)
+        self.assertIn("lvs_netgen", tools_called)
+        ext_calls = [c for c in sess.calls if c[0] == "extract_magic"]
+        self.assertEqual(ext_calls[0][1].get("cell"), "top")
+
+    def test_lvs_skipped_without_pdk(self):
+        sess = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {"success": True, "violations": [], "totalViolations": 0, "clean": True},
+        })
+        res = run_signoff_stage("top_routed.def", "top", netlist_file="top_synth.v", session=sess)
+        self.assertTrue(res.passed)
+        self.assertIsNone(res.lvs_match)
+        tools_called = [c[0] for c in sess.calls]
+        self.assertNotIn("extract_magic", tools_called)
+        self.assertTrue(any("LVS skipped" in d for d in res.diagnostics))
+
+    def test_lvs_mismatch_does_not_fail_stage_yet(self):
+        sess = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {"success": True, "violations": [], "totalViolations": 0, "clean": True},
+            "extract_magic": {"success": True, "spiceFile": "top_layout.spice"},
+            "lvs_netgen": {"success": True, "match": False},
+        })
+        res = run_signoff_stage("top_routed.def", "top", netlist_file="top_synth.v", pdk="sky130A", session=sess)
+        self.assertTrue(res.passed)
+        self.assertFalse(res.lvs_match)
+
 
 class TestFpgaFlow(unittest.TestCase):
     def test_full_chain_to_bitstream(self):

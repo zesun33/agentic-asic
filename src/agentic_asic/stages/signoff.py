@@ -1,9 +1,17 @@
-"""Stage 6 (v0.2): GDSII stream-out + DRC smoke via @zesun33/mcp-gds.
+"""Stage 6 (v0.3): GDSII stream-out + DRC + optional extract/LVS via @zesun33/mcp-gds.
 
-Passes iff both tools execute successfully. DRC findings attach as
-diagnostics/warnings: the generic geometry deck on abstract stream-out
-cannot be signoff-grade, so violations never fail this stage in v0.2.
-DRC-clean gating waits on PDK rule decks.
+Passes iff stream-out succeeds. DRC findings attach as diagnostics/warnings:
+the generic geometry deck on abstract stream-out cannot be signoff-grade,
+so violations never fail this stage. Pass pdk="sky130A" (pipeline does this
+automatically for --target sky130) to run the foundry DRC deck instead --
+only meaningful for Sky130 layouts; never auto-detected, since a foundry
+deck on a foreign-technology layout reports bogus violations.
+
+When netlist_file AND pdk are given, the stage additionally extracts the
+layout netlist (Magic, PDK tech) and LVS-compares it against synthesis
+(Netgen). LVS outcome attaches as lvs_match + diagnostics; mismatch does
+not fail the stage yet. Without a PDK, extraction is skipped honestly:
+generic-tech Magic cannot read GDS-II (no cifinput section).
 """
 
 import os
@@ -29,11 +37,14 @@ def run_signoff_stage(
     def_file: str,
     top_module: str,
     gds_file: Optional[str] = None,
+    netlist_file: Optional[str] = None,
+    pdk: Optional[str] = None,
     cwd: Optional[str] = None,
     session: Optional[MCPClientSession] = None,
 ) -> SignoffStageResult:
-    """Streams DEF to GDSII and runs KLayout DRC smoke checks."""
+    """Streams DEF to GDSII, runs DRC, and optionally extract+LVS."""
     norm_def = _relpath_if_possible(def_file, cwd)
+    norm_netlist = _relpath_if_possible(netlist_file, cwd) if netlist_file else None
 
     owns_session = False
     if session is None:
@@ -61,10 +72,12 @@ def run_signoff_stage(
             )
 
         out_gds = str(stream.get("gdsFile", ""))
-        drc = session.call_tool(
-            "drc_klayout",
-            {"gds_file": out_gds, **({"cwd": cwd} if cwd else {})},
-        )
+        drc_args: Dict[str, Any] = {"gds_file": out_gds}
+        if pdk:
+            drc_args["pdk"] = pdk
+        if cwd:
+            drc_args["cwd"] = cwd
+        drc = session.call_tool("drc_klayout", drc_args)
         if not isinstance(drc, dict):
             return SignoffStageResult(
                 stage_name="signoff",
@@ -82,6 +95,55 @@ def run_signoff_stage(
             if isinstance(v, dict)
         ]
 
+        # Optional extract + LVS: layout netlist vs synthesis netlist.
+        # PDK-gated: Magic's generic technology cannot read GDS-II at all
+        # ("Nothing in cifinput section"), and DEF input needs LEF cell
+        # definitions, so extraction is only meaningful with a PDK tech.
+        lvs_details: Dict[str, Any] = {}
+        lvs_fields: Dict[str, Any] = {}
+        if norm_netlist and not pdk:
+            diagnostics.append(
+                "LVS skipped: GDS extraction needs a PDK technology "
+                "(run --target sky130 with a PDK once Sky130 P&R lands)."
+            )
+        if norm_netlist and pdk:
+            layout_spice = f"{top_module}_layout.spice"
+            ext_args: Dict[str, Any] = {
+                "source": out_gds,
+                "cell": top_module,
+                "output_spice": layout_spice,
+            }
+            if cwd:
+                ext_args["cwd"] = cwd
+            ext = session.call_tool("extract_magic", ext_args)
+            lvs_details["extract"] = ext
+            if isinstance(ext, dict) and ext.get("success"):
+                layout_cell = top_module
+                lvs_args: Dict[str, Any] = {
+                    "schematic_netlist": norm_netlist,
+                    "schematic_cell": top_module,
+                    "layout_netlist": layout_spice,
+                    "layout_cell": layout_cell,
+                }
+                if pdk:
+                    lvs_args["pdk"] = pdk
+                if cwd:
+                    lvs_args["cwd"] = cwd
+                lvs = session.call_tool("lvs_netgen", lvs_args)
+                lvs_details["lvs"] = lvs
+                if isinstance(lvs, dict):
+                    match = lvs.get("match")
+                    lvs_fields["layout_spice"] = layout_spice
+                    lvs_fields["lvs_match"] = bool(match) if match is not None else None
+                    diagnostics.append(
+                        f"LVS vs synthesis: {'MATCH' if match else 'MISMATCH'}"
+                    )
+                else:
+                    diagnostics.append(f"LVS returned invalid response: {lvs}")
+            else:
+                errs = ext.get("errors", ["extraction failed"]) if isinstance(ext, dict) else [f"Invalid response: {ext}"]
+                diagnostics.append(f"Layout extraction failed, LVS skipped: {errs}")
+
         return SignoffStageResult(
             stage_name="signoff",
             passed=True,
@@ -89,7 +151,8 @@ def run_signoff_stage(
             drc_violations=total,
             drc_clean=clean,
             diagnostics=diagnostics,
-            details={"stream": stream, "drc": drc},
+            details={"stream": stream, "drc": drc, **lvs_details},
+            **lvs_fields,
         )
     except Exception as e:
         return SignoffStageResult(

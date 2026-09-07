@@ -79,6 +79,22 @@ class ASICPipeline:
         # rejects operator expressions. Only liberty-mapped targets (e.g.
         # nangate45) produce mappable netlists; generic/ice40/xilinx/intel do
         # not. Fail fast instead of running a vacuous flow.
+        # Sky130 synthesizes but P&R is nangate45-only (mcp-openroad has no
+        # Sky130 platform yet); fail fast with guidance, not a deep stacktrace.
+        if do_pnr and self.target_pdk == "sky130":
+            duration = time.time() - start_time
+            return {
+                "success": False,
+                "failing_stage": "config",
+                "results": {},
+                "duration_seconds": duration,
+                "retries": retries_performed,
+                "error_message": (
+                    "do_pnr with target_pdk='sky130' is not supported yet: mcp-openroad "
+                    "only implements the nangate45 platform. Use --target nangate45 for "
+                    "P&R, or --target sky130 with --no-pnr for synthesis-only."
+                ),
+            }
         if do_pnr and self.target_pdk == "generic":
             duration = time.time() - start_time
             return {
@@ -236,6 +252,11 @@ class ASICPipeline:
                     signoff_res = run_signoff_stage(
                         def_file=pnr_def,
                         top_module=top_module,
+                        netlist_file=actual_netlist,
+                        # Foundry DRC deck only for Sky130 layouts; a PDK
+                        # deck on a foreign-technology layout reports bogus
+                        # violations, so this is explicit, never auto-detected.
+                        pdk="sky130A" if self.target_pdk == "sky130" else None,
                         cwd=self.work_dir,
                     )
                     results["signoff"] = signoff_res
