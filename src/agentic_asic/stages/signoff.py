@@ -94,13 +94,26 @@ def run_signoff_stage(
             )
 
         violations = drc.get("violations", []) if isinstance(drc.get("violations"), list) else []
+        informational = drc.get("informational", []) if isinstance(drc.get("informational"), list) else []
         total = int(drc.get("totalViolations", len(violations)))
+        info_count = int(drc.get("informationalCount", sum(int(v.get("count", 0) or 0) for v in informational if isinstance(v, dict))))
         clean = bool(drc.get("clean", total == 0))
         diagnostics = [
             f"{v.get('rule', '?')}: {v.get('count', 0)} finding(s)"
             for v in violations
             if isinstance(v, dict)
         ]
+        for v in informational:
+            if isinstance(v, dict):
+                diagnostics.append(
+                    f"{v.get('rule', '?')}: {v.get('count', 0)} finding(s) "
+                    "[informational: Sky130 LEF-abstract pin artifact]"
+                )
+        if info_count:
+            diagnostics.append(
+                f"{info_count} informational DRC hit(s) classified as LEF-abstract pin artifacts "
+                "(not silently dropped; not foundry-clean)."
+            )
 
         # Optional extract + LVS: layout netlist vs synthesis netlist.
         # PDK-gated: Magic's generic technology cannot read GDS-II at all
@@ -159,6 +172,7 @@ def run_signoff_stage(
             gds_file=out_gds,
             drc_violations=total,
             drc_clean=clean,
+            drc_informational=info_count,
             diagnostics=diagnostics,
             details={"stream": stream, "drc": drc, **lvs_details},
             **lvs_fields,

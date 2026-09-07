@@ -94,7 +94,7 @@ class SignoffReporter:
         signoff = results.get("signoff")
         if isinstance(signoff, SignoffStageResult):
             status = "\033[1;32mPASSED\033[0m" if signoff.passed else "\033[1;31mFAILED\033[0m"
-            print(f"  {'6. GDS Signoff':<27} {status:<20} DRC findings: {signoff.drc_violations} (clean: {signoff.drc_clean}, LVS: {signoff.lvs_match})")
+            print(f"  {'6. GDS Signoff':<27} {status:<20} DRC: {signoff.drc_violations} actionable / {signoff.drc_informational} informational (clean: {signoff.drc_clean}, LVS: {signoff.lvs_match})")
 
         if error_message:
             print(f"  Config error: {error_message}")
@@ -175,6 +175,7 @@ class SignoffReporter:
                 stages_data[name]["gds_file"] = r.gds_file
                 stages_data[name]["drc_violations"] = r.drc_violations
                 stages_data[name]["drc_clean"] = r.drc_clean
+                stages_data[name]["drc_informational"] = r.drc_informational
                 stages_data[name]["lvs_match"] = r.lvs_match
             elif isinstance(r, FpgaStageResult):
                 stages_data[name]["board"] = r.board
@@ -285,7 +286,7 @@ class SignoffReporter:
         if isinstance(signoff, SignoffStageResult):
             lines.append("### Stage 6: GDSII Stream-Out & DRC Smoke")
             lines.append(f"- **GDS File**: `{signoff.gds_file}`")
-            lines.append(f"- **DRC Findings**: `{signoff.drc_violations}` (clean: `{signoff.drc_clean}`)")
+            lines.append(f"- **DRC Findings**: `{signoff.drc_violations}` actionable, `{signoff.drc_informational}` informational (clean: `{signoff.drc_clean}`)")
             lines.append("")
 
         if isinstance(pnr, PnRStageResult):

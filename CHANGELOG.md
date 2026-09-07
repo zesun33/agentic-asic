@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Signoff reports Sky130 `li.6` LEF-abstract pin hits as informational DRC (`drc_informational`), separate from actionable `drc_violations`.
+
 ## [0.2.1] - 2026-09-07
 
 ### Added

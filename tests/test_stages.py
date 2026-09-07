@@ -99,6 +99,25 @@ class TestSignoffStage(unittest.TestCase):
         self.assertFalse(res.drc_clean)
         self.assertTrue(any("W_31/0" in d for d in res.diagnostics))
 
+    def test_informational_li6_does_not_count_as_actionable_drc(self):
+        sess = StubSession({
+            "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
+            "drc_klayout": {
+                "success": True,
+                "violations": [],
+                "informational": [{"rule": "li.6", "count": 91}],
+                "totalViolations": 0,
+                "informationalCount": 91,
+                "clean": True,
+            },
+        })
+        res = run_signoff_stage("top_routed.def", "top", session=sess)
+        self.assertTrue(res.passed)
+        self.assertEqual(res.drc_violations, 0)
+        self.assertTrue(res.drc_clean)
+        self.assertEqual(res.drc_informational, 91)
+        self.assertTrue(any("informational" in d.lower() for d in res.diagnostics))
+
     def test_stream_failure_fails_stage(self):
         sess = StubSession({
             "gds_stream_out": {"success": False, "errors": ["no DEF"]},

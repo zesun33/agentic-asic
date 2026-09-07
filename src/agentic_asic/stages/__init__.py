@@ -61,6 +61,7 @@ class SignoffStageResult(StageResult):
     gds_file: Optional[str] = None
     drc_violations: int = 0
     drc_clean: bool = False
+    drc_informational: int = 0
     layout_spice: Optional[str] = None
     lvs_match: Optional[bool] = None
 
