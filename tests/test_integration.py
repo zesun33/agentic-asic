@@ -138,6 +138,21 @@ class TestASICIntegration(unittest.TestCase):
         self.assertTrue(formal_res.passed)
         self.assertEqual(formal_res.verdict, "PROVEN")
 
+    def test_pipeline_refutes_bad_assert_fixture(self):
+        prop_v = os.path.join(FIXTURES_DIR, "counter_assert_bad.sv")
+        pipeline = ASICPipeline(work_dir=self.temp_dir)
+        out = pipeline.run(
+            verilog_sources=[prop_v],
+            top_module="counter_assert_bad",
+            do_pnr=False,
+        )
+        self.assertFalse(out["success"])
+        self.assertEqual(out["failing_stage"], "formal")
+        self.assertIn("formal", out["results"])
+        formal_res = out["results"]["formal"]
+        self.assertFalse(formal_res.passed)
+        self.assertEqual(formal_res.verdict, "FAILED")
+
     def test_pipeline_signoff_after_pnr(self):
         counter_v = os.path.join(FIXTURES_DIR, "counter.v")
         counter_tb = os.path.join(FIXTURES_DIR, "counter_tb.v")

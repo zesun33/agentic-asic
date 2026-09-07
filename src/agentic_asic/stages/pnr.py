@@ -28,6 +28,9 @@ def run_pnr_stage(
     sdc_file: Optional[str] = None,
     platform: str = "nangate45",
     detail_route: bool = False,
+    tapcells: bool = False,
+    fillers: bool = False,
+    timeout_ms: int = 1800000,
     cwd: Optional[str] = None,
     session: Optional[MCPClientSession] = None,
 ) -> PnRStageResult:
@@ -56,6 +59,9 @@ def run_pnr_stage(
             "core_utilization": core_utilization,
             "platform": platform,
             "detail_route": detail_route,
+            "tapcells": tapcells,
+            "fillers": fillers,
+            "timeout_ms": timeout_ms,
         }
         if norm_def:
             args["output_def"] = norm_def

@@ -39,6 +39,7 @@ def run_signoff_stage(
     gds_file: Optional[str] = None,
     netlist_file: Optional[str] = None,
     pdk: Optional[str] = None,
+    timeout_ms: int = 1800000,
     cwd: Optional[str] = None,
     session: Optional[MCPClientSession] = None,
 ) -> SignoffStageResult:
@@ -59,7 +60,7 @@ def run_signoff_stage(
         owns_session = True
 
     try:
-        stream_args: Dict[str, Any] = {"def_file": norm_def}
+        stream_args: Dict[str, Any] = {"def_file": norm_def, "timeout_ms": timeout_ms}
         if gds_file:
             stream_args["gds_file"] = gds_file
         if pdk:
@@ -78,7 +79,7 @@ def run_signoff_stage(
             )
 
         out_gds = str(stream.get("gdsFile", ""))
-        drc_args: Dict[str, Any] = {"gds_file": out_gds}
+        drc_args: Dict[str, Any] = {"gds_file": out_gds, "timeout_ms": timeout_ms}
         if pdk:
             drc_args["pdk"] = pdk
         if cwd:
@@ -118,6 +119,7 @@ def run_signoff_stage(
                 "source": out_gds,
                 "cell": top_module,
                 "output_spice": layout_spice,
+                "timeout_ms": timeout_ms,
             }
             if cwd:
                 ext_args["cwd"] = cwd
@@ -130,6 +132,7 @@ def run_signoff_stage(
                     "schematic_cell": top_module,
                     "layout_netlist": layout_spice,
                     "layout_cell": layout_cell,
+                    "timeout_ms": timeout_ms,
                 }
                 if pdk:
                     lvs_args["pdk"] = pdk

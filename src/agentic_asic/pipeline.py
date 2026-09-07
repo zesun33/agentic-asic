@@ -3,7 +3,7 @@
 import os
 import shutil
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from agentic_asic.reporter import SignoffReporter
 from agentic_asic.self_healing import SelfHealingEngine
 from agentic_asic.stages import (
@@ -69,9 +69,21 @@ class ASICPipeline:
         formal_depth: int = 10,
         formal_defines: Optional[List[str]] = None,
         do_signoff: bool = True,
+        progress: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
-        """Executes the complete ASIC flow with automated self-healing."""
+        """Executes the complete ASIC flow with automated self-healing.
+
+        progress, when given, receives one short line per stage start
+        (e.g. "stage:pnr attempt:1") so long silent runs stay observable.
+        """
         start_time = time.time()
+
+        def emit(msg: str) -> None:
+            if progress is not None:
+                try:
+                    progress(msg)
+                except Exception:
+                    pass
         results: Dict[str, StageResult] = {}
         retries_performed = 0
 
@@ -99,6 +111,7 @@ class ASICPipeline:
         staged_tb = _stage_file(testbench, self.work_dir) if testbench else None
         staged_sdc = _stage_file(sdc_file, self.work_dir) if sdc_file else None
 
+        emit("stage:review")
         # Stage 1: Review
         rev_res = run_review_stage(
             verilog_sources=staged_sources,
@@ -117,6 +130,7 @@ class ASICPipeline:
                 "retries": retries_performed,
             }
 
+        emit("stage:simulate")
         # Stage 2: Simulation
         sim_res = run_simulate_stage(
             verilog_sources=staged_sources,
@@ -140,6 +154,7 @@ class ASICPipeline:
         # explicitly disabled; explicit formal_sources override detection.
         formal_candidates = formal_sources if formal_sources is not None else staged_sources
         if do_formal and detect_assertions(formal_candidates, self.work_dir):
+            emit("stage:formal")
             formal_res = run_formal_stage(
                 verilog_sources=formal_candidates,
                 top_module=top_module,
@@ -159,6 +174,7 @@ class ASICPipeline:
                     "retries": retries_performed,
                 }
 
+        emit("stage:synthesize")
         # Stage 4: Logic Synthesis
         netlist_out = f"{top_module}_synth.v"
         # Sky130 also emits a hierarchical SPICE schematic for LVS signoff.
@@ -192,6 +208,7 @@ class ASICPipeline:
             pnr_success = False
 
             for attempt in range(max_retries + 1):
+                emit(f"stage:pnr attempt:{attempt + 1}")
                 def_out = f"{top_module}_routed.def"
                 pnr_res = run_pnr_stage(
                     netlist_file=actual_netlist,
@@ -203,6 +220,9 @@ class ASICPipeline:
                     platform=self.target_pdk,
                     # Sky130 LVS needs real wires: global-route DEFs have none.
                     detail_route=self.target_pdk == "sky130",
+                    # Well taps + fillers on Sky130 (proven, no PDN required).
+                    tapcells=self.target_pdk == "sky130",
+                    fillers=self.target_pdk == "sky130",
                     cwd=self.work_dir,
                 )
                 results["pnr"] = pnr_res
@@ -239,6 +259,7 @@ class ASICPipeline:
                 if isinstance(pnr_stage, PnRStageResult):
                     pnr_def = pnr_stage.def_file
                 if pnr_def:
+                    emit("stage:signoff")
                     # LVS compares against the SPICE schematic when available
                     # (Sky130), else the gate netlist (honestly skipped without a PDK).
                     actual_spice = synth_res.spice_file

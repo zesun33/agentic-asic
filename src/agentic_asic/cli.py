@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from typing import List, Optional
 from agentic_asic import __version__
 from agentic_asic.mcp_client import MCPClientSession, MCPServerLocator
@@ -63,6 +64,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         target_pdk=args.target,
     )
 
+    run_start = time.time()
+
+    def show_progress(msg: str) -> None:
+        elapsed = time.time() - run_start
+        print(f"[asic +{elapsed:7.1f}s] {msg}", flush=True)
+
+    show_progress(f"run start: top={top} target={args.target}")
     out = pipeline.run(
         verilog_sources=sources,
         top_module=top,
@@ -75,6 +83,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         formal_depth=args.formal_depth,
         formal_defines=args.formal_defines,
         do_signoff=not args.no_signoff,
+        progress=None if args.json else show_progress,
     )
 
     results = out["results"]
