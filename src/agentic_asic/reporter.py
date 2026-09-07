@@ -159,11 +159,13 @@ class SignoffReporter:
                 stages_data[name]["cell_counts"] = r.cell_counts
                 stages_data[name]["inferred_latches"] = r.inferred_latches
                 stages_data[name]["netlist_file"] = r.netlist_file
+                stages_data[name]["spice_file"] = r.spice_file
             elif isinstance(r, PnRStageResult):
                 stages_data[name]["wns_ns"] = r.wns_ns
                 stages_data[name]["tns_ns"] = r.tns_ns
                 stages_data[name]["clock_period_ns"] = r.clock_period_ns
                 stages_data[name]["core_utilization"] = r.core_utilization
+                stages_data[name]["platform"] = r.platform
                 stages_data[name]["def_file"] = r.def_file
             elif isinstance(r, FormalStageResult):
                 stages_data[name]["verdict"] = r.verdict

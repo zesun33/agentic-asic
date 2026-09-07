@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from agentic_asic.stages.formal import run_formal_stage, detect_assertions
 from agentic_asic.stages.signoff import run_signoff_stage
+from agentic_asic.stages.synthesize import run_synthesize_stage
+from agentic_asic.stages.pnr import run_pnr_stage
 from agentic_asic.stages.fpga import run_fpga_flow
 
 
@@ -115,6 +117,9 @@ class TestSignoffStage(unittest.TestCase):
         drc_calls = [c for c in sess.calls if c[0] == "drc_klayout"]
         self.assertEqual(len(drc_calls), 1)
         self.assertEqual(drc_calls[0][1].get("pdk"), "sky130A")
+        stream_calls = [c for c in sess.calls if c[0] == "gds_stream_out"]
+        self.assertEqual(len(stream_calls), 1)
+        self.assertEqual(stream_calls[0][1].get("pdk"), "sky130A")
 
         sess2 = StubSession({
             "gds_stream_out": {"success": True, "gdsFile": "top.gds", "cellsWritten": 14},
@@ -220,3 +225,43 @@ class TestSanitizeNondeterminism(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSynthSpiceExport(unittest.TestCase):
+    def _sess(self):
+        return StubSession({
+            "yosys_check_latch": {"hasLatches": False, "latches": []},
+            "yosys_synthesize": {"success": True, "cellsByType": {"x": 1}, "cellCount": 1, "netlistPath": "top_synth.v"},
+            "yosys_write_spice": {"success": True, "spiceFile": "top_synth.spice", "cellCount": 1},
+        })
+
+    def test_spice_export_called_when_requested(self):
+        sess = self._sess()
+        res = run_synthesize_stage(["a.v"], "top", target="sky130", output_netlist="top_synth.v",
+                                   output_spice="top_synth.spice", session=sess)
+        self.assertTrue(res.passed)
+        self.assertEqual(res.spice_file, "top_synth.spice")
+        tools = [c[0] for c in sess.calls]
+        self.assertIn("yosys_write_spice", tools)
+
+    def test_no_spice_call_without_output_spice(self):
+        sess = self._sess()
+        res = run_synthesize_stage(["a.v"], "top", target="nangate45", output_netlist="top_synth.v", session=sess)
+        self.assertTrue(res.passed)
+        self.assertIsNone(res.spice_file)
+        tools = [c[0] for c in sess.calls]
+        self.assertNotIn("yosys_write_spice", tools)
+
+
+class TestPnrDetailRoute(unittest.TestCase):
+    def test_detail_route_and_platform_forwarded(self):
+        sess = StubSession({
+            "openroad_pnr": {"success": True, "timing": {"wns": 0.1, "tns": 0.0, "timingMet": True}, "defFile": "top_routed.def"},
+        })
+        res = run_pnr_stage("top_synth.v", "top", platform="sky130", detail_route=True, session=sess)
+        self.assertTrue(res.passed)
+        self.assertEqual(res.platform, "sky130")
+        pnr_calls = [c for c in sess.calls if c[0] == "openroad_pnr"]
+        self.assertEqual(len(pnr_calls), 1)
+        self.assertEqual(pnr_calls[0][1].get("platform"), "sky130")
+        self.assertTrue(pnr_calls[0][1].get("detail_route"))

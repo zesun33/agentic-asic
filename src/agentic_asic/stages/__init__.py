@@ -35,6 +35,7 @@ class SynthStageResult(StageResult):
     cell_counts: Dict[str, int] = field(default_factory=dict)
     inferred_latches: List[str] = field(default_factory=list)
     netlist_file: Optional[str] = None
+    spice_file: Optional[str] = None
 
 
 @dataclass
@@ -43,6 +44,7 @@ class PnRStageResult(StageResult):
     tns_ns: float = 0.0
     clock_period_ns: float = 2.0
     core_utilization: float = 0.35
+    platform: str = "nangate45"
     def_file: Optional[str] = None
     timing_met: bool = True
 

@@ -24,6 +24,7 @@ def run_synthesize_stage(
     top_module: str,
     target: str = "generic",
     output_netlist: Optional[str] = None,
+    output_spice: Optional[str] = None,
     cwd: Optional[str] = None,
     allow_latches: bool = False,
     session: Optional[MCPClientSession] = None,
@@ -31,6 +32,7 @@ def run_synthesize_stage(
     """Synthesizes RTL, triages latches, and produces gate netlist."""
     norm_sources = [_relpath_if_possible(s, cwd) for s in verilog_sources]
     norm_netlist = _relpath_if_possible(output_netlist, cwd) if output_netlist else None
+    norm_spice = _relpath_if_possible(output_spice, cwd) if output_spice else None
 
     owns_session = False
     if session is None:
@@ -107,6 +109,24 @@ def run_synthesize_stage(
         if netlist_path and cwd and not os.path.isabs(netlist_path):
             netlist_path = os.path.join(cwd, netlist_path)
 
+        # 3. Optional SPICE schematic for LVS (Sky130 hierarchical export).
+        spice_path: Optional[str] = None
+        spice_details: Dict[str, Any] = {}
+        if passed and norm_spice and netlist_path:
+            spice_args: Dict[str, Any] = {
+                "netlist_file": _relpath_if_possible(netlist_path, cwd),
+                "top_module": top_module,
+                "output_spice": norm_spice,
+            }
+            if cwd:
+                spice_args["cwd"] = cwd
+            spice_res = session.call_tool("yosys_write_spice", spice_args)
+            spice_details["spice"] = spice_res
+            if isinstance(spice_res, dict) and spice_res.get("success"):
+                spice_path = spice_res.get("spiceFile") or output_spice
+                if spice_path and cwd and not os.path.isabs(spice_path):
+                    spice_path = os.path.join(cwd, spice_path)
+
         return SynthStageResult(
             stage_name="synthesize",
             passed=passed,
@@ -115,7 +135,8 @@ def run_synthesize_stage(
             cell_counts=cell_counts,
             inferred_latches=inferred_latches,
             netlist_file=netlist_path,
-            details={"synth": synth_res, "latch": latch_res},
+            spice_file=spice_path,
+            details={"synth": synth_res, "latch": latch_res, **spice_details},
             error_message=None if passed else "Yosys synthesis failed to generate netlist",
         )
     except Exception as e:

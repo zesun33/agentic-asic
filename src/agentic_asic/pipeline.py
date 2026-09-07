@@ -77,24 +77,8 @@ class ASICPipeline:
 
         # P&R consumes the synth netlist in OpenROAD, whose Verilog frontend
         # rejects operator expressions. Only liberty-mapped targets (e.g.
-        # nangate45) produce mappable netlists; generic/ice40/xilinx/intel do
-        # not. Fail fast instead of running a vacuous flow.
-        # Sky130 synthesizes but P&R is nangate45-only (mcp-openroad has no
-        # Sky130 platform yet); fail fast with guidance, not a deep stacktrace.
-        if do_pnr and self.target_pdk == "sky130":
-            duration = time.time() - start_time
-            return {
-                "success": False,
-                "failing_stage": "config",
-                "results": {},
-                "duration_seconds": duration,
-                "retries": retries_performed,
-                "error_message": (
-                    "do_pnr with target_pdk='sky130' is not supported yet: mcp-openroad "
-                    "only implements the nangate45 platform. Use --target nangate45 for "
-                    "P&R, or --target sky130 with --no-pnr for synthesis-only."
-                ),
-            }
+        # nangate45, sky130) produce mappable netlists; generic/ice40/xilinx/
+        # intel do not. Fail fast instead of running a vacuous flow.
         if do_pnr and self.target_pdk == "generic":
             duration = time.time() - start_time
             return {
@@ -177,11 +161,14 @@ class ASICPipeline:
 
         # Stage 4: Logic Synthesis
         netlist_out = f"{top_module}_synth.v"
+        # Sky130 also emits a hierarchical SPICE schematic for LVS signoff.
+        spice_out = f"{top_module}_synth.spice" if self.target_pdk == "sky130" else None
         synth_res = run_synthesize_stage(
             verilog_sources=staged_sources,
             top_module=top_module,
             target=self.target_pdk,
             output_netlist=netlist_out,
+            output_spice=spice_out,
             cwd=self.work_dir,
         )
         results["synthesize"] = synth_res
@@ -213,6 +200,9 @@ class ASICPipeline:
                     core_utilization=current_util,
                     output_def=def_out,
                     sdc_file=staged_sdc,
+                    platform=self.target_pdk,
+                    # Sky130 LVS needs real wires: global-route DEFs have none.
+                    detail_route=self.target_pdk == "sky130",
                     cwd=self.work_dir,
                 )
                 results["pnr"] = pnr_res
@@ -249,10 +239,15 @@ class ASICPipeline:
                 if isinstance(pnr_stage, PnRStageResult):
                     pnr_def = pnr_stage.def_file
                 if pnr_def:
+                    # LVS compares against the SPICE schematic when available
+                    # (Sky130), else the gate netlist (honestly skipped without a PDK).
+                    actual_spice = synth_res.spice_file
+                    if actual_spice and os.path.isabs(actual_spice):
+                        actual_spice = os.path.relpath(actual_spice, self.work_dir)
                     signoff_res = run_signoff_stage(
                         def_file=pnr_def,
                         top_module=top_module,
-                        netlist_file=actual_netlist,
+                        netlist_file=actual_spice or actual_netlist,
                         # Foundry DRC deck only for Sky130 layouts; a PDK
                         # deck on a foreign-technology layout reports bogus
                         # violations, so this is explicit, never auto-detected.

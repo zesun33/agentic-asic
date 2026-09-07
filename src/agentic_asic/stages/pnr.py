@@ -26,6 +26,8 @@ def run_pnr_stage(
     core_utilization: float = 0.70,
     output_def: Optional[str] = None,
     sdc_file: Optional[str] = None,
+    platform: str = "nangate45",
+    detail_route: bool = False,
     cwd: Optional[str] = None,
     session: Optional[MCPClientSession] = None,
 ) -> PnRStageResult:
@@ -52,6 +54,8 @@ def run_pnr_stage(
             "top_module": top_module,
             "clock_period_ns": clock_period_ns,
             "core_utilization": core_utilization,
+            "platform": platform,
+            "detail_route": detail_route,
         }
         if norm_def:
             args["output_def"] = norm_def
@@ -82,6 +86,7 @@ def run_pnr_stage(
             passed=passed and timing_met,
             clock_period_ns=clock_period_ns,
             core_utilization=core_utilization,
+            platform=platform,
             wns_ns=wns,
             tns_ns=tns,
             def_file=def_path,

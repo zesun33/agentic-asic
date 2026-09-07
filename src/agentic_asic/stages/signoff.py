@@ -59,10 +59,16 @@ def run_signoff_stage(
         owns_session = True
 
     try:
-        stream = session.call_tool(
-            "gds_stream_out",
-            {"def_file": norm_def, **({"gds_file": gds_file} if gds_file else {}), **({"cwd": cwd} if cwd else {})},
-        )
+        stream_args: Dict[str, Any] = {"def_file": norm_def}
+        if gds_file:
+            stream_args["gds_file"] = gds_file
+        if pdk:
+            # PDK LEFs resolve foreign-technology macros (Sky130 DEFs fail
+            # against the default Nangate45 LEFs with "Macro not found").
+            stream_args["pdk"] = pdk
+        if cwd:
+            stream_args["cwd"] = cwd
+        stream = session.call_tool("gds_stream_out", stream_args)
         if not isinstance(stream, dict) or not stream.get("success"):
             errs = stream.get("errors", ["stream-out failed"]) if isinstance(stream, dict) else [f"Invalid response: {stream}"]
             return SignoffStageResult(
