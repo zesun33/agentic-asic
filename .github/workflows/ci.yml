@@ -31,7 +31,7 @@ jobs:
 
       - name: Create mock MCP server stubs
         run: |
-          for s in mcp-rtl-review mcp-verilog mcp-cocotb mcp-yosys mcp-openroad; do
+          for s in mcp-rtl-review mcp-verilog mcp-cocotb mcp-yosys mcp-openroad mcp-gds mcp-formal mcp-fpga; do
             mkdir -p ../$s/dist
             touch ../$s/dist/index.js
           done
