@@ -6,8 +6,8 @@ from agentic_asic.self_healing import SelfHealingEngine
 
 
 class TestMCPClientAndSelfHealing(unittest.TestCase):
-    def test_server_locator_resolves_all_5_servers(self):
-        for s in ["review", "verilog", "cocotb", "yosys", "openroad"]:
+    def test_server_locator_resolves_all_8_servers(self):
+        for s in ["review", "verilog", "cocotb", "yosys", "openroad", "gds", "formal", "fpga"]:
             cmd = MCPServerLocator.resolve(s)
             self.assertIsNotNone(cmd, f"Locator failed to resolve {s}")
             self.assertEqual(cmd[0], "node")

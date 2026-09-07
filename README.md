@@ -21,8 +21,10 @@ flowchart TD
     subgraph Stages["Closed-Loop Silicon Pipeline"]
         S1["Stage 1: AST Review<br/><code>@zesun33/mcp-rtl-review</code>"]
         S2["Stage 2: Simulation<br/><code>@zesun33/mcp-verilog</code> & <code>cocotb</code>"]
-        S3["Stage 3: Logic Synthesis<br/><code>@zesun33/mcp-yosys</code>"]
-        S4["Stage 4: Physical P&R & STA<br/><code>@zesun33/mcp-openroad</code>"]
+        S3["Stage 3: Formal (asserts only)<br/><code>@zesun33/mcp-formal</code>"]
+        S4["Stage 4: Logic Synthesis<br/><code>@zesun33/mcp-yosys</code>"]
+        S5["Stage 5: Physical P&R & STA<br/><code>@zesun33/mcp-openroad</code>"]
+        S6["Stage 6: GDS Signoff<br/><code>@zesun33/mcp-gds</code>"]
     end
 
     Orchestrator --> S1
@@ -32,25 +34,40 @@ flowchart TD
     S2 -- "Functional Assertions Pass" --> S3
     S2 -- "Simulation Assertion Failure" --> Healing
 
-    S3 -- "No Inferred Latches" --> S4
-    S3 -- "Transparent Latch Detected" --> Healing
+    S3 -- "No asserts: skip" --> S4
+    S3 -- "PROVEN" --> S4
+    S3 -- "FAILED" --> Healing
 
-    S4 -- "WNS >= 0.0 ns (Timing Met)" --> Signoff["Automated Signoff Reports<br/>(Rich Dashboard, Markdown, JSON)"]
-    S4 -- "Timing Slacks or Congestion" --> Healing
+    S4 -- "No Inferred Latches" --> S5
+    S4 -- "Transparent Latch Detected" --> Healing
 
-    Healing -- "Auto-tune Core Utilization & Clock Period" --> S4
+    S5 -- "WNS >= 0.0 ns (Timing Met)" --> S6
+    S5 -- "Timing Slacks or Congestion" --> Healing
+
+    S6 -- "Stream + DRC executed" --> Signoff["Automated Signoff Reports<br/>(Rich Dashboard, Markdown, JSON)"]
+
+    Healing -- "Auto-tune Core Utilization & Clock Period" --> S5
+
+    subgraph FPGA["Standalone FPGA Track"]
+        F1["asic fpga run --board<br/><code>@zesun33/mcp-fpga</code>"]
+    end
+
+    Orchestrator -. "separate track" .-> F1
 ```
 
 ---
 
-## The 4 Pipeline Stages
+## The 6 Pipeline Stages (+1 FPGA Track)
 
 | Stage | EDA Server | Underlying Engines | Purpose & Signoff Gate |
 | :--- | :--- | :--- | :--- |
 | **1. AST Review** | [`@zesun33/mcp-rtl-review`](https://github.com/zesun33/mcp-rtl-review) | AST Semantic Parser | 0–100 quality score, blocking assignment triage, unclocked register audit. |
 | **2. Simulation** | [`@zesun33/mcp-verilog`](https://github.com/zesun33/mcp-verilog) / [`cocotb`](https://github.com/zesun33/mcp-cocotb) | Icarus Verilog + VVP / Cocotb | Behavioral regression testbenches, assertions (`$fatal`), and waveform inspection. |
-| **3. Logic Synth** | [`@zesun33/mcp-yosys`](https://github.com/zesun33/mcp-yosys) | Yosys 0.38+ / ABC | Gate technology mapping, transparent latch prevention, cell count profiling. |
-| **4. Physical P&R** | [`@zesun33/mcp-openroad`](https://github.com/zesun33/mcp-openroad) | OpenROAD 2.0 (Nangate45 / Sky130) | Floorplanning, global/detailed placement, CTS, routing, and STA timing closure. |
+| **3. Formal** | [`@zesun33/mcp-formal`](https://github.com/zesun33/mcp-formal) | SymbiYosys smtbmc+z3 | Proves embedded SVA (auto-detected; `--no-formal` to skip). PROVEN passes. |
+| **4. Logic Synth** | [`@zesun33/mcp-yosys`](https://github.com/zesun33/mcp-yosys) | Yosys 0.38+ / ABC | Gate technology mapping, transparent latch prevention, cell count profiling. P&R needs a liberty-mapped target (`nangate45`). |
+| **5. Physical P&R** | [`@zesun33/mcp-openroad`](https://github.com/zesun33/mcp-openroad) | OpenROAD 2.0 (Nangate45) | Floorplanning, global/detailed placement, CTS, routing, and STA timing closure. |
+| **6. GDS Signoff** | [`@zesun33/mcp-gds`](https://github.com/zesun33/mcp-gds) | KLayout | DEF-to-GDS stream-out plus DRC smoke. Findings warn; PDK decks gate later. |
+| **FPGA** | [`@zesun33/mcp-fpga`](https://github.com/zesun33/mcp-fpga) | Yosys + nextpnr + icepack/ecppack | Separate `asic fpga run --board` track: synth, P&R, bitstream, dry-run program. |
 
 ---
 
@@ -62,7 +79,7 @@ asic doctor
 ```
 ```text
 === agentic-asic Doctor: MCP Toolchain Verification ===
-  agentic-asic version: 0.1.0
+  agentic-asic version: 0.2.0
   -------------------------------------------------------------
   ✓ review     : .../mcp-rtl-review/dist/index.js
   ✓ verilog    : .../mcp-verilog/dist/index.js
@@ -70,7 +87,7 @@ asic doctor
   ✓ yosys      : .../mcp-yosys/dist/index.js
   ✓ openroad   : .../mcp-openroad/dist/index.js
   -------------------------------------------------------------
-  All 5 EDA MCP servers are operational and resolved.
+  All 8 EDA MCP servers are operational and resolved.
 ```
 
 ### 2. Run the Deterministic Golden Demo

@@ -42,7 +42,7 @@ run_gate_2() {
 
 run_gate_3() {
   printf "\033[1;36mGate 3 — Unit Tests\033[0m\n"
-  PYTHONPATH=src python3 -m unittest tests/test_spec.py tests/test_mcp_client.py -v
+  PYTHONPATH=src python3 -m unittest tests/test_spec.py tests/test_mcp_client.py tests/test_stages.py -v
   pass 3 "Unit tests and spec verification passed"
 }
 
@@ -74,7 +74,7 @@ run_gate_6() {
 import json
 with open("transcripts/golden_asic_flow.json") as f:
     d = json.load(f)
-assert d["schema_version"] == "1.0.0"
+assert d["schema_version"] == "1.1.0"
 assert d["signoff_status"] == "PASS"
 assert "review" in d["stages"]
 assert "simulate" in d["stages"]

@@ -1,8 +1,8 @@
 # ASIC Signoff Tapeout Report: `counter`
 
 **Signoff Verdict**: 🟢 **PASS: TAPE-OUT READY**  
-**Run Duration**: 2.03s (Heuristic Retries: 0)  
-**Orchestrator**: `agentic-asic` v0.1.0 (Model Context Protocol)  
+**Run Duration**: 6.62s (Heuristic Retries: 0)  
+**Orchestrator**: `agentic-asic` v0.2.0 (Model Context Protocol)  
 
 ## 1. Stage Signoff Summary
 
@@ -10,8 +10,9 @@
 | :--- | :--- | :---: | :--- |
 | **1. AST Review** | `@zesun33/mcp-rtl-review` | `✔ PASS` | Score: 100/100, Violations: 0 |
 | **2. Simulation** | `@zesun33/mcp-verilog` / `cocotb` | `✔ PASS` | iverilog: 1/1 test(s) passed |
-| **3. Logic Synth** | `@zesun33/mcp-yosys` | `✔ PASS` | Cells: 10, Latches: 0 |
+| **3. Logic Synth** | `@zesun33/mcp-yosys` | `✔ PASS` | Cells: 11, Latches: 0 |
 | **4. Physical P&R** | `@zesun33/mcp-openroad` | `✔ PASS` | WNS: 0.00ns, Util: 0.35 |
+| **6. GDS Signoff** | `@zesun33/mcp-gds` | `✔ PASS` | DRC findings: 0 |
 
 ## 2. Stage Details
 
@@ -20,13 +21,19 @@
 - **Violations**: Zero detected (Clean RTL)
 
 ### Stage 3: Logic Synthesis & Cell Breakdown
-- **Total Logic Cells**: `10`
+- **Total Logic Cells**: `11`
 - **Inferred Latches**: `0`
 - **Gate Breakdown**:
-  - `$_AND_`: 2
-  - `$_DFFE_PN0P_`: 4
-  - `$_NOT_`: 1
-  - `$_XOR_`: 3
+  - `DFFR_X1`: 4
+  - `MUX2_X1`: 1
+  - `NAND2_X1`: 1
+  - `NAND3_X1`: 1
+  - `NAND4_X1`: 1
+  - `XNOR2_X1`: 3
+
+### Stage 6: GDSII Stream-Out & DRC Smoke
+- **GDS File**: `counter_routed.gds`
+- **DRC Findings**: `0` (clean: `True`)
 
 ### Stage 4: Physical Design & Static Timing Analysis
 - **Worst Negative Slack (WNS)**: `0.00 ns`

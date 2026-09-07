@@ -51,7 +51,7 @@ class MCPClientSession:
                 "capabilities": {},
                 "clientInfo": {
                     "name": "agentic-asic",
-                    "version": "0.1.0",
+                    "version": "0.2.0",
                 },
             },
         }
@@ -169,7 +169,7 @@ class MCPClientSession:
 
 
 class MCPServerLocator:
-    """Discovers and resolves binary paths for the 5 EDA MCP servers."""
+    """Discovers and resolves binary paths for the 8 EDA MCP servers."""
 
     SERVERS = {
         "review": "mcp-rtl-review",
@@ -177,6 +177,9 @@ class MCPServerLocator:
         "cocotb": "mcp-cocotb",
         "yosys": "mcp-yosys",
         "openroad": "mcp-openroad",
+        "gds": "mcp-gds",
+        "formal": "mcp-formal",
+        "fpga": "mcp-fpga",
     }
 
     @classmethod

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-06
+
+### Added
+- `MCPServerLocator` resolves 8 EDA MCP servers (`gds`, `formal`, `fpga` join the original 5); `asic doctor` verifies all 8.
+- Formal stage (`stages/formal.py`): auto-detects `assert` properties in RTL (opt-out via `--no-formal`), proves with `@zesun33/mcp-formal` (`--formal-mode`, `--formal-depth`, `--formal-sources`).
+- GDS signoff stage (`stages/signoff.py`): DEF-to-GDS stream-out plus KLayout DRC smoke via `@zesun33/mcp-gds` (opt-out via `--no-signoff`); DRC findings attach as diagnostics.
+- Standalone FPGA track (`stages/fpga.py`, `asic fpga run --board`): synth, place-and-route, bitstream packing, and dry-run programming via `@zesun33/mcp-fpga`.
+- Signoff JSON schema `1.1.0` with `formal`, `signoff`, and `fpga` stage blocks; dashboard and Markdown report rows for the new stages.
+
 ## [0.1.0] - 2026-09-05
 
 ### Added

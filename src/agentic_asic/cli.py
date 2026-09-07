@@ -17,7 +17,7 @@ from agentic_asic.stages.synthesize import run_synthesize_stage
 
 def print_doctor(as_json: bool = False) -> int:
     """Checks the health of all 5 EDA MCP servers and underlying runtime tools."""
-    servers = ["review", "verilog", "cocotb", "yosys", "openroad"]
+    servers = ["review", "verilog", "cocotb", "yosys", "openroad", "gds", "formal", "fpga"]
     status: dict = {"version": __version__, "servers": {}}
     all_ok = True
 
@@ -42,7 +42,7 @@ def print_doctor(as_json: bool = False) -> int:
             print(f"  \033[1;31m✗\033[0m \033[1m{s:<10}\033[0m : NOT FOUND (Check sibling repos or MCP_*_PATH)")
     print("  -------------------------------------------------------------")
     if all_ok:
-        print("  \033[1;32mAll 5 EDA MCP servers are operational and resolved.\033[0m\n")
+        print("  \033[1;32mAll 8 EDA MCP servers are operational and resolved.\033[0m\n")
         return 0
     else:
         print("  \033[1;31mOne or more MCP servers could not be located.\033[0m\n")
@@ -69,6 +69,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         testbench=args.tb,
         sdc_file=args.sdc,
         do_pnr=not args.no_pnr,
+        do_formal=not args.no_formal,
+        formal_sources=args.formal_sources,
+        formal_mode=args.formal_mode,
+        formal_depth=args.formal_depth,
+        formal_defines=args.formal_defines,
+        do_signoff=not args.no_signoff,
     )
 
     results = out["results"]
@@ -77,9 +83,11 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     if args.json:
         report = SignoffReporter.generate_json_report(top, results, duration, retries)
+        if out.get("error_message"):
+            report["error_message"] = out["error_message"]
         print(json.dumps(report, indent=2))
     else:
-        SignoffReporter.print_terminal_dashboard(top, results, duration, retries)
+        SignoffReporter.print_terminal_dashboard(top, results, duration, retries, out.get("error_message"))
 
     if args.report_out:
         md = SignoffReporter.generate_markdown_report(top, results, duration, retries)
@@ -113,7 +121,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
         work_dir=work_dir,
         clock_period_ns=2.0,
         core_utilization=0.35,
-        target_pdk="generic",
+        target_pdk="nangate45",
     )
 
     out = pipeline.run(
@@ -147,6 +155,55 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0 if out["success"] else 1
 
 
+def cmd_fpga(args: argparse.Namespace) -> int:
+    """Standalone FPGA track: synth -> place-and-route -> bitstream (dry-run program)."""
+    import time
+    from agentic_asic.stages.fpga import run_fpga_flow
+
+    sources = args.sources
+    top = args.top
+    if not top:
+        top = os.path.splitext(os.path.basename(sources[0]))[0]
+
+    work_dir = args.work_dir or os.getcwd()
+    staged = []
+    for src in sources:
+        dest = os.path.join(work_dir, os.path.basename(src))
+        if os.path.abspath(src) != os.path.abspath(dest):
+            import shutil
+            os.makedirs(work_dir, exist_ok=True)
+            shutil.copy2(src, dest)
+        staged.append(os.path.basename(dest))
+
+    start = time.time()
+    res = run_fpga_flow(
+        verilog_sources=staged,
+        top_module=top,
+        board=args.board,
+        cwd=work_dir,
+    )
+    duration = time.time() - start
+
+    if args.json:
+        print(json.dumps({
+            "tool": "agentic-asic",
+            "track": "fpga",
+            "design": top,
+            "success": res.passed,
+            "board": res.board,
+            "bitstream_file": res.bitstream_file,
+            "utilization": res.utilization,
+            "fmax_mhz": res.fmax_mhz,
+            "diagnostics": res.diagnostics,
+            "error_message": res.error_message,
+            "duration_seconds": round(duration, 2),
+        }, indent=2))
+    else:
+        SignoffReporter.print_fpga_dashboard(top, res, duration)
+
+    return 0 if res.passed else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="asic",
@@ -163,6 +220,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_demo = subparsers.add_parser("demo", help="Run golden end-to-end demo on fixtures/counter.v")
     p_demo.add_argument("--work-dir", type=str, help="Output directory for generated netlists and defs")
 
+    # fpga
+    p_fpga = subparsers.add_parser("fpga", help="Run standalone FPGA flow (synth -> P&R -> bitstream)")
+    p_fpga.add_argument("sources", nargs="+", help="Verilog source files")
+    p_fpga.add_argument("--top", type=str, help="Top module name (defaults to file basename)")
+    p_fpga.add_argument("--board", type=str, default="icebreaker", help="Board preset (default: icebreaker)")
+    p_fpga.add_argument("--json", action="store_true", help="Emit JSON report to stdout")
+    p_fpga.add_argument("--work-dir", type=str, help="Working directory for artifacts")
+
     # run
     p_run = subparsers.add_parser("run", help="Run full closed-loop ASIC flow on RTL design")
     p_run.add_argument("sources", nargs="+", help="Verilog source files")
@@ -173,6 +238,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_run.add_argument("--util", type=float, default=0.70, help="Core placement utilization (default: 0.70)")
     p_run.add_argument("--target", type=str, default="nangate45", choices=["generic", "ice40", "sky130", "nangate45"], help="PDK target (default: nangate45)")
     p_run.add_argument("--no-pnr", action="store_true", help="Skip physical design stage")
+    p_run.add_argument("--no-formal", action="store_true", help="Skip formal stage even if asserts are detected")
+    p_run.add_argument("--formal-mode", type=str, default="bmc", choices=["bmc", "prove"], help="Formal engine mode (default: bmc)")
+    p_run.add_argument("--formal-depth", type=int, default=10, help="Formal bound depth in [1, 100] (default: 10)")
+    p_run.add_argument("--formal-defines", nargs="*", default=None, help="Preprocessor defines for formal read (default: FORMAL)")
+    p_run.add_argument("--formal-sources", nargs="*", default=None, help="Explicit RTL files for the formal stage (default: auto-detect asserts)")
+    p_run.add_argument("--no-signoff", action="store_true", help="Skip GDS stream-out and DRC smoke stage")
     p_run.add_argument("--json", action="store_true", help="Emit JSON signoff report to stdout")
     p_run.add_argument("--report-out", type=str, help="Export markdown signoff report to file")
     p_run.add_argument("--work-dir", type=str, help="Working directory for artifacts")
@@ -181,6 +252,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.subcommand == "doctor":
         return print_doctor(as_json=args.json)
+    elif args.subcommand == "fpga":
+        return cmd_fpga(args)
     elif args.subcommand == "demo":
         return cmd_demo(args)
     elif args.subcommand == "run":

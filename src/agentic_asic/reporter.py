@@ -5,8 +5,11 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 from agentic_asic.stages import (
+    FormalStageResult,
+    FpgaStageResult,
     PnRStageResult,
     ReviewStageResult,
+    SignoffStageResult,
     SimStageResult,
     StageResult,
     SynthStageResult,
@@ -22,8 +25,9 @@ class SignoffReporter:
         results: Dict[str, StageResult],
         total_duration_s: float,
         retries: int = 0,
+        error_message: Optional[str] = None,
     ) -> None:
-        passed_all = all(r.passed for r in results.values())
+        passed_all = len(results) > 0 and all(r.passed for r in results.values())
 
         print("\n\033[1;36m=======================================================================\033[0m")
         print("\033[1;36m                      agentic-asic Signoff Dashboard                   \033[0m")
@@ -59,11 +63,49 @@ class SignoffReporter:
             status = "\033[1;32mPASSED\033[0m" if pnr.passed else "\033[1;31mFAILED\033[0m"
             print(f"  {'4. Physical P&R':<27} {status:<20} WNS: {pnr.wns_ns:.2f}ns, Util: {pnr.core_utilization:.2f}")
 
+        # Stage 5: Formal (only when RTL carries asserts)
+        formal = results.get("formal")
+        if isinstance(formal, FormalStageResult):
+            status = "\033[1;32mPASSED\033[0m" if formal.passed else "\033[1;31mFAILED\033[0m"
+            print(f"  {'5. Formal':<27} {status:<20} Verdict: {formal.verdict}, Failed asserts: {len(formal.failed_assertions)}")
+
+        # Stage 6: Signoff (only when P&R ran)
+        signoff = results.get("signoff")
+        if isinstance(signoff, SignoffStageResult):
+            status = "\033[1;32mPASSED\033[0m" if signoff.passed else "\033[1;31mFAILED\033[0m"
+            print(f"  {'6. GDS Signoff':<27} {status:<20} DRC findings: {signoff.drc_violations} (clean: {signoff.drc_clean})")
+
+        if error_message:
+            print(f"  Config error: {error_message}")
         print("  ---------------------------------------------------------------------")
         if passed_all:
             print("  \033[1;32m✔ FINAL ASIC SIGNOFF VERDICT: TAPE-OUT READY (ALL GATES PASSED)\033[0m")
         else:
             print("  \033[1;31m✖ FINAL ASIC SIGNOFF VERDICT: VIOLATION (REPAIR REQUIRED)\033[0m")
+        print("\033[1;36m=======================================================================\033[0m\n")
+
+    @staticmethod
+    def print_fpga_dashboard(
+        design_name: str,
+        result: "FpgaStageResult",
+        total_duration_s: float,
+    ) -> None:
+        from agentic_asic.stages import FpgaStageResult as _FpgaRes
+
+        print("\n\033[1;36m=======================================================================\033[0m")
+        print("\033[1;36m                      agentic-asic FPGA Flow                        \033[0m")
+        print("\033[1;36m=======================================================================\033[0m")
+        print(f"  Design Module : \033[1m{design_name}\033[0m")
+        print(f"  Board         : {result.board}")
+        print(f"  Duration      : {total_duration_s:.2f} seconds")
+        print("  ---------------------------------------------------------------------")
+        status = "\033[1;32mPASSED\033[0m" if result.passed else "\033[1;31mFAILED\033[0m"
+        detail = result.bitstream_file or (result.error_message or "")
+        print(f"  {'FPGA flow':<27} {status:<20} {detail}")
+        if isinstance(result, _FpgaRes) and result.fmax_mhz is not None:
+            print(f"  {'Fmax':<27} {'':<20} {result.fmax_mhz:.2f} MHz")
+        for d in result.diagnostics:
+            print(f"  - {d}")
         print("\033[1;36m=======================================================================\033[0m\n")
 
     @staticmethod
@@ -74,7 +116,7 @@ class SignoffReporter:
         retries: int = 0,
     ) -> Dict[str, Any]:
         """Builds a deterministic JSON dictionary conforming to the signoff schema."""
-        passed_all = all(r.passed for r in results.values())
+        passed_all = len(results) > 0 and all(r.passed for r in results.values())
         stages_data: Dict[str, Any] = {}
 
         for name, r in results.items():
@@ -103,9 +145,21 @@ class SignoffReporter:
                 stages_data[name]["clock_period_ns"] = r.clock_period_ns
                 stages_data[name]["core_utilization"] = r.core_utilization
                 stages_data[name]["def_file"] = r.def_file
+            elif isinstance(r, FormalStageResult):
+                stages_data[name]["verdict"] = r.verdict
+                stages_data[name]["failed_assertions"] = r.failed_assertions
+            elif isinstance(r, SignoffStageResult):
+                stages_data[name]["gds_file"] = r.gds_file
+                stages_data[name]["drc_violations"] = r.drc_violations
+                stages_data[name]["drc_clean"] = r.drc_clean
+            elif isinstance(r, FpgaStageResult):
+                stages_data[name]["board"] = r.board
+                stages_data[name]["bitstream_file"] = r.bitstream_file
+                stages_data[name]["utilization"] = r.utilization
+                stages_data[name]["fmax_mhz"] = r.fmax_mhz
 
         return {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "tool": "agentic-asic",
             "design": design_name,
             "signoff_status": "PASS" if passed_all else "FAIL",
@@ -122,7 +176,7 @@ class SignoffReporter:
         retries: int = 0,
     ) -> str:
         """Generates a GitHub-ready Markdown report."""
-        passed_all = all(r.passed for r in results.values())
+        passed_all = len(results) > 0 and all(r.passed for r in results.values())
         badge = "🟢 **PASS: TAPE-OUT READY**" if passed_all else "🔴 **FAIL: VIOLATIONS DETECTED**"
 
         lines = [
@@ -130,7 +184,7 @@ class SignoffReporter:
             "",
             f"**Signoff Verdict**: {badge}  ",
             f"**Run Duration**: {total_duration_s:.2f}s (Heuristic Retries: {retries})  ",
-            f"**Orchestrator**: `agentic-asic` v0.1.0 (Model Context Protocol)  ",
+            f"**Orchestrator**: `agentic-asic` v0.2.0 (Model Context Protocol)  ",
             "",
             "## 1. Stage Signoff Summary",
             "",
@@ -158,6 +212,16 @@ class SignoffReporter:
             status = "✔ PASS" if pnr.passed else "✖ FAIL"
             lines.append(f"| **4. Physical P&R** | `@zesun33/mcp-openroad` | `{status}` | WNS: {pnr.wns_ns:.2f}ns, Util: {pnr.core_utilization:.2f} |")
 
+        formal = results.get("formal")
+        if isinstance(formal, FormalStageResult):
+            status = "✔ PASS" if formal.passed else "✖ FAIL"
+            lines.append(f"| **5. Formal** | `@zesun33/mcp-formal` | `{status}` | Verdict: {formal.verdict} |")
+
+        signoff = results.get("signoff")
+        if isinstance(signoff, SignoffStageResult):
+            status = "✔ PASS" if signoff.passed else "✖ FAIL"
+            lines.append(f"| **6. GDS Signoff** | `@zesun33/mcp-gds` | `{status}` | DRC findings: {signoff.drc_violations} |")
+
         lines.extend([
             "",
             "## 2. Stage Details",
@@ -183,6 +247,21 @@ class SignoffReporter:
                 lines.append("- **Gate Breakdown**:")
                 for cell, cnt in synth.cell_counts.items():
                     lines.append(f"  - `{cell}`: {cnt}")
+            lines.append("")
+
+        if isinstance(formal, FormalStageResult):
+            lines.append("### Stage 5: Formal Property Verification")
+            lines.append(f"- **Verdict**: `{formal.verdict}`")
+            if formal.failed_assertions:
+                lines.append("- **Counterexamples**:")
+                for fa in formal.failed_assertions:
+                    lines.append(f"  - `{fa.get('name', '?')}` at `{fa.get('location', '?')}` (step {fa.get('step', '?')})")
+            lines.append("")
+
+        if isinstance(signoff, SignoffStageResult):
+            lines.append("### Stage 6: GDSII Stream-Out & DRC Smoke")
+            lines.append(f"- **GDS File**: `{signoff.gds_file}`")
+            lines.append(f"- **DRC Findings**: `{signoff.drc_violations}` (clean: `{signoff.drc_clean}`)")
             lines.append("")
 
         if isinstance(pnr, PnRStageResult):

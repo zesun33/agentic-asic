@@ -17,6 +17,8 @@ from agentic_asic.stages.pnr import run_pnr_stage
 from agentic_asic.stages.review import run_review_stage
 from agentic_asic.stages.simulate import run_simulate_stage
 from agentic_asic.stages.synthesize import run_synthesize_stage
+from agentic_asic.stages.formal import run_formal_stage, detect_assertions
+from agentic_asic.stages.signoff import run_signoff_stage
 
 
 def _stage_file(path: str, target_dir: str) -> str:
@@ -61,11 +63,36 @@ class ASICPipeline:
         sdc_file: Optional[str] = None,
         do_pnr: bool = True,
         max_retries: int = 2,
+        do_formal: bool = True,
+        formal_sources: Optional[List[str]] = None,
+        formal_mode: str = "bmc",
+        formal_depth: int = 10,
+        formal_defines: Optional[List[str]] = None,
+        do_signoff: bool = True,
     ) -> Dict[str, Any]:
         """Executes the complete ASIC flow with automated self-healing."""
         start_time = time.time()
         results: Dict[str, StageResult] = {}
         retries_performed = 0
+
+        # P&R consumes the synth netlist in OpenROAD, whose Verilog frontend
+        # rejects operator expressions. Only liberty-mapped targets (e.g.
+        # nangate45) produce mappable netlists; generic/ice40/xilinx/intel do
+        # not. Fail fast instead of running a vacuous flow.
+        if do_pnr and self.target_pdk == "generic":
+            duration = time.time() - start_time
+            return {
+                "success": False,
+                "failing_stage": "config",
+                "results": {},
+                "duration_seconds": duration,
+                "retries": retries_performed,
+                "error_message": (
+                    "do_pnr requires a liberty-mapped synthesis target (e.g. target_pdk='nangate45'); "
+                    "'generic' netlists keep operator expressions OpenROAD cannot read. "
+                    "Use --target nangate45 or --no-pnr."
+                ),
+            }
 
         # Stage input files into work_dir so Podman/Docker can access them at /workspace
         staged_sources = [_stage_file(s, self.work_dir) for s in verilog_sources]
@@ -108,7 +135,31 @@ class ASICPipeline:
                 "retries": retries_performed,
             }
 
-        # Stage 3: Logic Synthesis
+        # Stage 3 (opt-in by content): Formal property verification.
+        # Runs only when RTL carries assert properties (auto-detected) unless
+        # explicitly disabled; explicit formal_sources override detection.
+        formal_candidates = formal_sources if formal_sources is not None else staged_sources
+        if do_formal and detect_assertions(formal_candidates, self.work_dir):
+            formal_res = run_formal_stage(
+                verilog_sources=formal_candidates,
+                top_module=top_module,
+                mode=formal_mode,
+                depth=formal_depth,
+                defines=formal_defines,
+                cwd=self.work_dir,
+            )
+            results["formal"] = formal_res
+            if not formal_res.passed:
+                duration = time.time() - start_time
+                return {
+                    "success": False,
+                    "failing_stage": "formal",
+                    "results": results,
+                    "duration_seconds": duration,
+                    "retries": retries_performed,
+                }
+
+        # Stage 4: Logic Synthesis
         netlist_out = f"{top_module}_synth.v"
         synth_res = run_synthesize_stage(
             verilog_sources=staged_sources,
@@ -128,7 +179,7 @@ class ASICPipeline:
                 "retries": retries_performed,
             }
 
-        # Stage 4: Physical P&R (Optional)
+        # Stage 5: Physical P&R (Optional)
         if do_pnr:
             actual_netlist = synth_res.netlist_file or netlist_out
             if os.path.isabs(actual_netlist):
@@ -174,6 +225,29 @@ class ASICPipeline:
                     "duration_seconds": duration,
                     "retries": retries_performed,
                 }
+
+            # Stage 6 (v0.2): GDSII stream-out + DRC smoke on the routed DEF.
+            if do_signoff and pnr_success:
+                pnr_def = None
+                pnr_stage = results.get("pnr")
+                if isinstance(pnr_stage, PnRStageResult):
+                    pnr_def = pnr_stage.def_file
+                if pnr_def:
+                    signoff_res = run_signoff_stage(
+                        def_file=pnr_def,
+                        top_module=top_module,
+                        cwd=self.work_dir,
+                    )
+                    results["signoff"] = signoff_res
+                    if not signoff_res.passed:
+                        duration = time.time() - start_time
+                        return {
+                            "success": False,
+                            "failing_stage": "signoff",
+                            "results": results,
+                            "duration_seconds": duration,
+                            "retries": retries_performed,
+                        }
 
         duration = time.time() - start_time
         return {

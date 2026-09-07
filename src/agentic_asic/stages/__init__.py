@@ -45,3 +45,24 @@ class PnRStageResult(StageResult):
     core_utilization: float = 0.35
     def_file: Optional[str] = None
     timing_met: bool = True
+
+
+@dataclass
+class FormalStageResult(StageResult):
+    verdict: str = "UNKNOWN"
+    failed_assertions: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class SignoffStageResult(StageResult):
+    gds_file: Optional[str] = None
+    drc_violations: int = 0
+    drc_clean: bool = False
+
+
+@dataclass
+class FpgaStageResult(StageResult):
+    board: str = ""
+    bitstream_file: Optional[str] = None
+    utilization: Dict[str, Any] = field(default_factory=dict)
+    fmax_mhz: Optional[float] = None
