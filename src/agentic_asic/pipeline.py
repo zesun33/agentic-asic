@@ -1,4 +1,4 @@
-"""Central ASIC pipeline coordinator orchestrating the 5 EDA MCP stages."""
+"""Central ASIC pipeline coordinator orchestrating the eight EDA MCP stages."""
 
 import os
 import shutil
@@ -208,21 +208,45 @@ class ASICPipeline:
             pnr_success = False
 
             for attempt in range(max_retries + 1):
-                emit(f"stage:pnr attempt:{attempt + 1}")
+                emit(
+                    f"stage:pnr attempt:{attempt + 1} "
+                    f"util={current_util:.2f} period={current_period:.3f}ns"
+                )
                 def_out = f"{top_module}_routed.def"
+                attempt_sdc = staged_sdc
+                if staged_sdc:
+                    src_sdc = staged_sdc
+                    if not os.path.isabs(src_sdc):
+                        src_sdc = os.path.join(self.work_dir, src_sdc)
+                    with open(src_sdc, "r", encoding="utf-8") as f:
+                        sdc_text = f.read()
+                    attempt_sdc = f"{top_module}_pnr_attempt{attempt + 1}.sdc"
+                    with open(
+                        os.path.join(self.work_dir, attempt_sdc), "w", encoding="utf-8"
+                    ) as f:
+                        f.write(
+                            SelfHealingEngine.apply_clock_period_to_sdc(
+                                sdc_text, current_period
+                            )
+                        )
                 pnr_res = run_pnr_stage(
                     netlist_file=actual_netlist,
                     top_module=top_module,
                     clock_period_ns=current_period,
                     core_utilization=current_util,
                     output_def=def_out,
-                    sdc_file=staged_sdc,
+                    sdc_file=attempt_sdc,
                     platform=self.target_pdk,
                     # Sky130 LVS needs real wires: global-route DEFs have none.
                     detail_route=self.target_pdk == "sky130",
-                    # Well taps + fillers on Sky130 (proven, no PDN required).
                     tapcells=self.target_pdk == "sky130",
                     fillers=self.target_pdk == "sky130",
+                    # Scale Sky130: PDN before place (so GPL sees straps) +
+                    # CTS after place (clkbuf_16/8/4, then legalize). Post-place
+                    # PDN + inferred clkbuf_1 was DRT-0073 / 0 signal wires.
+                    pdn=self.target_pdk == "sky130",
+                    cts=self.target_pdk == "sky130",
+                    timeout_ms=5400000 if self.target_pdk == "sky130" else 1800000,
                     cwd=self.work_dir,
                 )
                 results["pnr"] = pnr_res
@@ -231,16 +255,32 @@ class ASICPipeline:
                     pnr_success = True
                     break
 
+                emit(
+                    f"stage:pnr fail wns={pnr_res.wns_ns:.3f} "
+                    f"timed_out={pnr_res.timed_out} err={pnr_res.error_message}"
+                )
+
+                # Timeouts are not congestion: dropping util and retrying
+                # burned 90 min (3x30) without ever finishing STA.
+                if pnr_res.timed_out:
+                    break
+
                 if attempt < max_retries:
                     retries_performed += 1
-                    # Self-healing parameter adjustment
-                    failure_type = "timing" if pnr_res.wns_ns < 0 else "placement"
+                    err = (pnr_res.error_message or "").lower()
+                    if "signal wires" in err or "drt-0073" in err or "pin-access" in err:
+                        failure_type = "placement"
+                    elif pnr_res.wns_ns < 0:
+                        failure_type = "timing"
+                    else:
+                        failure_type = "placement"
                     current_util, current_period, reason = SelfHealingEngine.recommend_pnr_relaxation(
                         core_utilization=current_util,
                         clock_period_ns=current_period,
                         wns_ns=pnr_res.wns_ns,
                         failure_type=failure_type,
                     )
+                    emit(f"stage:pnr heal: {reason}")
 
             if not pnr_success:
                 duration = time.time() - start_time
@@ -273,6 +313,7 @@ class ASICPipeline:
                         # deck on a foreign-technology layout reports bogus
                         # violations, so this is explicit, never auto-detected.
                         pdk="sky130A" if self.target_pdk == "sky130" else None,
+                        timeout_ms=5400000 if self.target_pdk == "sky130" else 1800000,
                         cwd=self.work_dir,
                     )
                     results["signoff"] = signoff_res

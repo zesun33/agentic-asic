@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 from typing import Any, Dict, List, Optional
+from agentic_asic import __version__
 
 
 class MCPClientSession:
@@ -51,7 +52,7 @@ class MCPClientSession:
                 "capabilities": {},
                 "clientInfo": {
                     "name": "agentic-asic",
-                    "version": "0.2.0",
+                    "version": __version__,
                 },
             },
         }

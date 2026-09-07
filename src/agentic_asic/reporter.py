@@ -5,6 +5,7 @@ import os
 import re
 import time
 from typing import Any, Dict, List, Optional
+from agentic_asic import __version__
 from agentic_asic.stages import (
     FormalStageResult,
     FpgaStageResult,
@@ -207,7 +208,7 @@ class SignoffReporter:
             "",
             f"**Signoff Verdict**: {badge}  ",
             f"**Run Duration**: {total_duration_s:.2f}s (Heuristic Retries: {retries})  ",
-            f"**Orchestrator**: `agentic-asic` v0.2.0 (Model Context Protocol)  ",
+            f"**Orchestrator**: `agentic-asic` v{__version__} (Model Context Protocol)  ",
             "",
             "## 1. Stage Signoff Summary",
             "",

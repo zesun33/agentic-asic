@@ -8,7 +8,7 @@
 
 > **Autonomous Silicon Compilation & Signoff Orchestrator powered by EDA MCP Servers.**
 
-`agentic-asic` is a closed-loop silicon compilation and verification engine that acts as a production **Model Context Protocol (MCP) Client**. It coordinates five specialized EDA MCP servers to autonomously take digital RTL designs from Verilog to verified GDSII physical layout with automated static timing analysis (STA) and self-healing parameter optimization.
+`agentic-asic` is a closed-loop silicon compilation and verification engine that acts as a production **Model Context Protocol (MCP) Client**. It coordinates **eight** specialized EDA MCP servers (review, verilog, cocotb, yosys, openroad, gds, formal, fpga) to autonomously take digital RTL designs from Verilog to verified GDSII physical layout with automated static timing analysis (STA) and self-healing parameter optimization.
 
 ---
 
@@ -64,8 +64,8 @@ flowchart TD
 | **1. AST Review** | [`@zesun33/mcp-rtl-review`](https://github.com/zesun33/mcp-rtl-review) | AST Semantic Parser | 0–100 quality score, blocking assignment triage, unclocked register audit. |
 | **2. Simulation** | [`@zesun33/mcp-verilog`](https://github.com/zesun33/mcp-verilog) / [`cocotb`](https://github.com/zesun33/mcp-cocotb) | Icarus Verilog + VVP / Cocotb | Behavioral regression testbenches, assertions (`$fatal`), and waveform inspection. |
 | **3. Formal** | [`@zesun33/mcp-formal`](https://github.com/zesun33/mcp-formal) | SymbiYosys smtbmc+z3 | Proves embedded SVA (auto-detected; `--no-formal` to skip). PROVEN passes. |
-| **4. Logic Synth** | [`@zesun33/mcp-yosys`](https://github.com/zesun33/mcp-yosys) | Yosys 0.38+ / ABC | Gate technology mapping, transparent latch prevention, cell count profiling. P&R needs a liberty-mapped target (`nangate45`, or `sky130` with `MCP_*_PDK_ROOT`); `sky130` runs P&R on `sky130_fd_sc_hd` (tt corner, detail routing on, no tapcell/PDN yet) and emits a hierarchical SPICE schematic (`spice_file`) for LVS. |
-| **5. Physical P&R** | [`@zesun33/mcp-openroad`](https://github.com/zesun33/mcp-openroad) | OpenROAD 2.0 (Nangate45) | Floorplanning, global/detailed placement, CTS, routing, and STA timing closure. |
+| **4. Logic Synth** | [`@zesun33/mcp-yosys`](https://github.com/zesun33/mcp-yosys) | Yosys 0.38+ / ABC | Gate technology mapping, transparent latch prevention, cell count profiling. P&R needs a liberty-mapped target (`nangate45`, or `sky130` with `MCP_*_PDK_ROOT`); `sky130` emits a hierarchical SPICE schematic (`spice_file`) for LVS. |
+| **5. Physical P&R** | [`@zesun33/mcp-openroad`](https://github.com/zesun33/mcp-openroad) | OpenROAD 2.0 | Floorplanning, placement, CTS, routing, and STA. On `sky130`: detail route, well-tap/filler, stdcell PDN **before place**, and CTS (`clkbuf_16/8/4`) after place. Self-heal rewrites SDC `create_clock -period` so retries are not no-ops. |
 | **6. GDS Signoff** | [`@zesun33/mcp-gds`](https://github.com/zesun33/mcp-gds) | KLayout | DEF-to-GDS stream-out (PDK LEFs + foundry layer map for Sky130) plus DRC (foundry deck for Sky130; findings warn). With a SPICE schematic attached, extracts the layout (Magic) and LVS-compares against synthesis (Netgen), reported as `lvs_match` — proven `True` end-to-end on `--target sky130` counter (1 benign `li.6` DRC note from LEF-abstract pin shapes). |
 | **FPGA** | [`@zesun33/mcp-fpga`](https://github.com/zesun33/mcp-fpga) | Yosys + nextpnr + icepack/ecppack | Separate `asic fpga run --board` track: synth, P&R, bitstream, dry-run program. |
 
@@ -79,13 +79,16 @@ asic doctor
 ```
 ```text
 === agentic-asic Doctor: MCP Toolchain Verification ===
-  agentic-asic version: 0.2.0
+  agentic-asic version: 0.2.1
   -------------------------------------------------------------
   ✓ review     : .../mcp-rtl-review/dist/index.js
   ✓ verilog    : .../mcp-verilog/dist/index.js
   ✓ cocotb     : .../mcp-cocotb/dist/index.js
   ✓ yosys      : .../mcp-yosys/dist/index.js
   ✓ openroad   : .../mcp-openroad/dist/index.js
+  ✓ gds        : .../mcp-gds/dist/index.js
+  ✓ formal     : .../mcp-formal/dist/index.js
+  ✓ fpga       : .../mcp-fpga/dist/index.js
   -------------------------------------------------------------
   All 8 EDA MCP servers are operational and resolved.
 ```
@@ -126,6 +129,17 @@ asic run src/alu.v \
   --report-out tapeout_signoff.md
 ```
 
+Sky130 (host volare PDK + 90 min P&R budget). Scale vehicle `fixtures/regfile32x32.v` is live-proven (LVS match):
+
+```bash
+export MCP_YOSYS_PDK_ROOT=/path/to/volare/sky130/versions/<sha>
+export MCP_OPENROAD_PDK_ROOT=$MCP_YOSYS_PDK_ROOT
+export MCP_GDS_PDK_ROOT=$MCP_YOSYS_PDK_ROOT
+asic run fixtures/regfile32x32.v --tb fixtures/regfile32x32_tb.v \
+  --top regfile32x32 --sdc fixtures/regfile.sdc \
+  --target sky130 --util 0.35 --period 10.0
+```
+
 ### 4. Agent-Friendly JSON Output
 ```bash
 asic run fixtures/counter.v --json
@@ -137,7 +151,7 @@ asic run fixtures/counter.v --json
 
 When physical design faces timing violations (`WNS < 0`) or placement congestion, `agentic-asic` automatically calculates relaxation parameters:
 1. **Congestion Relaxation**: Dynamically reduces `core_utilization` (e.g. 0.45 → 0.35) and re-invokes placement.
-2. **Timing Slack Relaxation**: Automatically recalculates clock periods based on the Worst Negative Slack (WNS) margin.
+2. **Timing Slack Relaxation**: Recalculates the clock period from WNS (minimum +0.5 ns) and **rewrites the staged SDC** `create_clock -period` so `read_sdc` cannot freeze a stale constraint.
 3. **LLM Diagnostic Prompting**: Generates actionable, structured prompts formatted with exact source lines and AST diagnostics for autonomous code repair by language models.
 
 ---

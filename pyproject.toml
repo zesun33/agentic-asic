@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentic-asic"
-version = "0.2.0"
+version = "0.2.1"
 description = "Autonomous Silicon Compilation & Verification Orchestrator powered by EDA MCP Servers"
 readme = "README.md"
 authors = [{ name = "Md Zesun Ahmed Mia", email = "zesun33@users.noreply.github.com" }]

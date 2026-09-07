@@ -24,6 +24,16 @@ class TestMCPClientAndSelfHealing(unittest.TestCase):
         self.assertGreater(new_period, 1.00)
         self.assertIn("overcome WNS slack deficit", reason)
 
+    def test_self_healing_timing_has_half_ns_floor(self):
+        new_util, new_period, reason = SelfHealingEngine.recommend_pnr_relaxation(
+            core_utilization=0.35,
+            clock_period_ns=10.00,
+            wns_ns=-0.04,
+            failure_type="timing",
+        )
+        self.assertEqual(new_util, 0.35)
+        self.assertGreaterEqual(new_period, 10.50)
+
     def test_self_healing_congestion_relaxation(self):
         new_util, new_period, reason = SelfHealingEngine.recommend_pnr_relaxation(
             core_utilization=0.50,
@@ -34,6 +44,16 @@ class TestMCPClientAndSelfHealing(unittest.TestCase):
         self.assertLess(new_util, 0.50)
         self.assertEqual(new_period, 2.00)
         self.assertIn("relieve routing congestion", reason)
+
+    def test_apply_clock_period_to_sdc_rewrites_create_clock(self):
+        sdc = "create_clock -name clk -period 2.000 [get_ports clk]\n"
+        out = SelfHealingEngine.apply_clock_period_to_sdc(sdc, 7.26)
+        self.assertIn("-period 7.260", out)
+        self.assertNotIn("2.000", out)
+
+    def test_apply_clock_period_to_sdc_rejects_missing_clock(self):
+        with self.assertRaises(ValueError):
+            SelfHealingEngine.apply_clock_period_to_sdc("# empty\n", 10.0)
 
     def test_llm_repair_prompt_generation(self):
         prompt = SelfHealingEngine.generate_llm_repair_prompt(

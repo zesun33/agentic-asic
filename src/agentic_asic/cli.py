@@ -17,7 +17,7 @@ from agentic_asic.stages.synthesize import run_synthesize_stage
 
 
 def print_doctor(as_json: bool = False) -> int:
-    """Checks the health of all 5 EDA MCP servers and underlying runtime tools."""
+    """Checks the health of all 8 EDA MCP servers and underlying runtime tools."""
     servers = ["review", "verilog", "cocotb", "yosys", "openroad", "gds", "formal", "fpga"]
     status: dict = {"version": __version__, "servers": {}}
     all_ok = True

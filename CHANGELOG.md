@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-07
+
+### Added
+- Sky130 scale vehicle `fixtures/regfile32x32.v` (+ self-checking TB and complete SDC at 10 ns).
+- Sky130 P&R enables detail-route, taps/fillers, PDN, and CTS, with a 90 min tool timeout (no retry on timeout).
+- Per-attempt SDC rewrite so CLI / self-heal `clock_period_ns` actually applies (`read_sdc` no longer freezes the period).
+
+### Fixed
+- Timing self-heal was a no-op when an SDC file pinned `create_clock -period`.
+- Zero-signal-wire / DRT-0073 pin-access failures classified as placement, not timing.
+- Timing period bump has a 0.5 ns floor so a 40 ps miss does not burn a second full detailed-route.
+
 ## [0.2.0] - 2026-09-06
 
 ### Added

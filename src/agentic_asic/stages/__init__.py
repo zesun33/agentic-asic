@@ -47,6 +47,7 @@ class PnRStageResult(StageResult):
     platform: str = "nangate45"
     def_file: Optional[str] = None
     timing_met: bool = True
+    timed_out: bool = False
 
 
 @dataclass

@@ -265,3 +265,52 @@ class TestPnrDetailRoute(unittest.TestCase):
         self.assertEqual(len(pnr_calls), 1)
         self.assertEqual(pnr_calls[0][1].get("platform"), "sky130")
         self.assertTrue(pnr_calls[0][1].get("detail_route"))
+
+    def test_pdn_forwarded(self):
+        sess = StubSession({
+            "openroad_pnr": {"success": True, "timing": {"wns": 0.1, "tns": 0.0, "timingMet": True}, "defFile": "top_routed.def"},
+        })
+        res = run_pnr_stage("top_synth.v", "top", platform="sky130", pdn=True, session=sess)
+        self.assertTrue(res.passed)
+        pnr_calls = [c for c in sess.calls if c[0] == "openroad_pnr"]
+        self.assertTrue(pnr_calls[0][1].get("pdn"))
+
+    def test_cts_timeout_and_timed_out_forwarded(self):
+        sess = StubSession({
+            "openroad_pnr": {
+                "success": False,
+                "timedOut": True,
+                "errors": ["OpenROAD timed out after 5400000 ms (PNR_COMPLETE not reached)"],
+                "timing": {"wns": 0.0, "tns": 0.0, "timingMet": True},
+            },
+        })
+        res = run_pnr_stage(
+            "top_synth.v",
+            "top",
+            platform="sky130",
+            cts=True,
+            pdn=True,
+            timeout_ms=5400000,
+            session=sess,
+        )
+        self.assertFalse(res.passed)
+        self.assertTrue(res.timed_out)
+        self.assertIn("timed out", res.error_message.lower())
+        pnr_calls = [c for c in sess.calls if c[0] == "openroad_pnr"]
+        self.assertTrue(pnr_calls[0][1].get("cts"))
+        self.assertTrue(pnr_calls[0][1].get("pdn"))
+        self.assertEqual(pnr_calls[0][1].get("timeout_ms"), 5400000)
+
+    def test_zero_signal_wires_error_forwarded(self):
+        sess = StubSession({
+            "openroad_pnr": {
+                "success": False,
+                "errors": [
+                    "detailed_route wrote 0 signal wires (DRT-0073 pin-access or GRT produced no guides)"
+                ],
+                "timing": {"wns": -4.21, "tns": -10.0, "timingMet": False},
+            },
+        })
+        res = run_pnr_stage("top_synth.v", "top", platform="sky130", detail_route=True, session=sess)
+        self.assertFalse(res.passed)
+        self.assertIn("0 signal wires", res.error_message)

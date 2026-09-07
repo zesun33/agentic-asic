@@ -2,7 +2,7 @@
 
 **Signoff Verdict**: 🟢 **PASS: TAPE-OUT READY**  
 **Run Duration**: 6.46s (Heuristic Retries: 0)  
-**Orchestrator**: `agentic-asic` v0.2.0 (Model Context Protocol)  
+**Orchestrator**: `agentic-asic` v0.2.1 (Model Context Protocol)  
 
 ## 1. Stage Signoff Summary
 

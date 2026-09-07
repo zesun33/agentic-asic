@@ -30,6 +30,8 @@ def run_pnr_stage(
     detail_route: bool = False,
     tapcells: bool = False,
     fillers: bool = False,
+    pdn: bool = False,
+    cts: bool = False,
     timeout_ms: int = 1800000,
     cwd: Optional[str] = None,
     session: Optional[MCPClientSession] = None,
@@ -61,6 +63,8 @@ def run_pnr_stage(
             "detail_route": detail_route,
             "tapcells": tapcells,
             "fillers": fillers,
+            "pdn": pdn,
+            "cts": cts,
             "timeout_ms": timeout_ms,
         }
         if norm_def:
@@ -81,15 +85,25 @@ def run_pnr_stage(
             )
 
         passed = res.get("success", res.get("passed", False))
+        timed_out = bool(res.get("timedOut", res.get("timed_out", False)))
         timing = res.get("timing") or res.get("metrics") or {}
         wns = float(timing.get("wns", 0.0))
         tns = float(timing.get("tns", 0.0))
         timing_met = timing.get("timingMet", timing.get("timing_met", wns >= 0.0))
         def_path = res.get("defFile") or res.get("output_def") or output_def
+        errors = res.get("errors") or []
+        if timed_out:
+            err = errors[0] if errors else f"PnR timed out after {timeout_ms} ms"
+        elif errors:
+            err = errors[0]
+        elif not (passed and timing_met):
+            err = f"PnR failed or timing violation: WNS={wns} ns"
+        else:
+            err = None
 
         return PnRStageResult(
             stage_name="pnr",
-            passed=passed and timing_met,
+            passed=passed and timing_met and not timed_out,
             clock_period_ns=clock_period_ns,
             core_utilization=core_utilization,
             platform=platform,
@@ -97,8 +111,9 @@ def run_pnr_stage(
             tns_ns=tns,
             def_file=def_path,
             timing_met=timing_met,
+            timed_out=timed_out,
             details={"pnr": res},
-            error_message=None if (passed and timing_met) else f"PnR failed or timing violation: WNS={wns} ns",
+            error_message=err,
         )
     except Exception as e:
         return PnRStageResult(

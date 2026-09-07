@@ -1,10 +1,32 @@
 """Closed-loop self-healing heuristics and LLM diagnosis generator."""
 
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from typing import Dict, List, Optional, Tuple
+
+_CREATE_CLOCK_PERIOD = re.compile(
+    r"(create_clock\b[^\n]*?-period\s+)([0-9.]+)",
+    re.IGNORECASE,
+)
 
 
 class SelfHealingEngine:
     """Heuristic optimizer and diagnostic generator for failed ASIC stages."""
+
+    @staticmethod
+    def apply_clock_period_to_sdc(sdc_text: str, period_ns: float) -> str:
+        """Rewrite the first create_clock -period so CLI/heal period actually applies.
+
+        read_sdc wins over openroad_pnr's clock_period_ns, so a stale SDC file
+        makes timing retries no-ops (same WNS, same 2 ns clock, three times).
+        """
+        new, n = _CREATE_CLOCK_PERIOD.subn(
+            lambda m: f"{m.group(1)}{period_ns:.3f}",
+            sdc_text,
+            count=1,
+        )
+        if n == 0:
+            raise ValueError("SDC has no create_clock -period to update")
+        return new
 
     @staticmethod
     def recommend_pnr_relaxation(
@@ -25,9 +47,11 @@ class SelfHealingEngine:
                 f"Reduced core utilization from {core_utilization:.2f} to {new_util:.2f} to relieve routing congestion",
             )
         elif failure_type == "timing" and wns_ns < 0:
-            # Relax clock period by slack deficit + 20% margin
+            # Relax clock period by slack deficit + 25%, with a 0.5 ns floor
+            # so a -0.04 ns miss does not burn a full P&R for +0.05 ns.
             slack_deficit = abs(wns_ns)
-            new_period = round(clock_period_ns + (slack_deficit * 1.25), 2)
+            bump = max(slack_deficit * 1.25, 0.50)
+            new_period = round(clock_period_ns + bump, 2)
             return (
                 core_utilization,
                 new_period,
