@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 from agentic_asic.stages import (
@@ -14,6 +15,25 @@ from agentic_asic.stages import (
     StageResult,
     SynthStageResult,
 )
+
+
+_HASH_RE = re.compile(r"Logfile hash: [0-9a-f]+")
+_TIME_RE = re.compile(r"^Time spent:.*$", re.MULTILINE)
+_CPU_RE = re.compile(r", CPU: user .* system .* MEM: .* peak")
+
+
+def sanitize_nondeterminism(value):
+    """Strips run-varying tool chatter (hashes, CPU timings) so reports
+    and golden transcripts are byte-stable across identical runs."""
+    if isinstance(value, str):
+        value = _HASH_RE.sub("Logfile hash: <hash>", value)
+        value = _TIME_RE.sub("Time spent: <timing>", value)
+        return _CPU_RE.sub("", value)
+    if isinstance(value, list):
+        return [sanitize_nondeterminism(v) for v in value]
+    if isinstance(value, dict):
+        return {k: sanitize_nondeterminism(v) for k, v in value.items()}
+    return value
 
 
 class SignoffReporter:
@@ -124,7 +144,7 @@ class SignoffReporter:
                 "passed": r.passed,
                 "error_message": r.error_message,
                 "diagnostics": r.diagnostics,
-                "details": r.details,
+                "details": sanitize_nondeterminism(r.details),
             }
             if isinstance(r, ReviewStageResult):
                 stages_data[name]["score"] = r.score

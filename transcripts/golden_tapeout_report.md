@@ -1,7 +1,7 @@
 # ASIC Signoff Tapeout Report: `counter`
 
 **Signoff Verdict**: 🟢 **PASS: TAPE-OUT READY**  
-**Run Duration**: 6.62s (Heuristic Retries: 0)  
+**Run Duration**: 6.52s (Heuristic Retries: 0)  
 **Orchestrator**: `agentic-asic` v0.2.0 (Model Context Protocol)  
 
 ## 1. Stage Signoff Summary

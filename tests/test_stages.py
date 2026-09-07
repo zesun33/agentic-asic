@@ -1,5 +1,6 @@
 """Unit tests for the v0.2 formal, signoff, and FPGA stages (stub sessions, no containers)."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -132,6 +133,29 @@ class TestFpgaFlow(unittest.TestCase):
         res = run_fpga_flow(["b.v"], "blink", session=sess)
         self.assertFalse(res.passed)
         self.assertEqual(len(sess.calls), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+class TestSanitizeNondeterminism(unittest.TestCase):
+    def test_strips_hashes_timings_and_cpu(self):
+        from agentic_asic.reporter import sanitize_nondeterminism
+
+        raw = {
+            "rawStdout": "End of script. Logfile hash: d3662c29, CPU: user 0.19s system 0.02s, MEM: 28.75 MB peak\nTime spent: 45% 2x abc (0 sec)\nreal result 42\n",
+            "nested": ["Time spent: 1x opt (9 sec)", "keep me"],
+        }
+        clean = sanitize_nondeterminism(raw)
+        text = json.dumps(clean)
+        self.assertNotIn("d3662c29", text)
+        self.assertNotIn("0.19s", text)
+        self.assertIn("Logfile hash: <hash>", text)
+        self.assertIn("Time spent: <timing>", text)
+        self.assertIn("real result 42", text)
+        self.assertIn("keep me", text)
+        # Idempotent
+        self.assertEqual(sanitize_nondeterminism(clean), clean)
 
 
 if __name__ == "__main__":
