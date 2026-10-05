@@ -1,12 +1,32 @@
 # agentic-asic
 
+<!-- BEGIN GENERATED PROJECT GUIDE -->
+
+## Purpose and first steps
+
+Coordinate RTL review, verification, synthesis, and implementation through EDA MCP servers.
+
+**Who it is for:** Hardware engineers combining several EDA stages into one repeatable workflow.
+
+**First task:** Install the CLI from the checkout, run `asic doctor`, then inspect the counter demo.
+
+**What to expect:** Per-stage results and a report tying review, verification, synthesis, and implementation together.
+
+**Current scope:** An orchestrator over the MCP servers. Results apply to the selected design, constraints, tools, and PDK; a successful run does not establish manufacturing qualification.
+
+**Start here:** [CLI walkthrough](README.md#quick-tour--cli-usage).
+
+**Related projects:** [hw-agent-scaffold](https://github.com/zesun33/hw-agent-scaffold), [mcp-openroad](https://github.com/zesun33/mcp-openroad), [mcp-gds](https://github.com/zesun33/mcp-gds).
+
+[Choose another project](https://github.com/zesun33/personal-projects/blob/main/GETTING_STARTED.md).
+<!-- END GENERATED PROJECT GUIDE -->
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/zesun33/agentic-asic/actions/workflows/ci.yml/badge.svg)](https://github.com/zesun33/agentic-asic/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
 [![Protocol](https://img.shields.io/badge/MCP-Model_Context_Protocol-6B46C1.svg)](https://modelcontextprotocol.io)
-[![Status](https://img.shields.io/badge/Status-Phase_4_Production_Ready-brightgreen.svg)](#)
 
-> **Autonomous Silicon Compilation & Signoff Orchestrator powered by EDA MCP Servers.**
+> **MCP-based workflow orchestration for RTL verification and implementation.**
 
 `agentic-asic` is a closed-loop silicon compilation and verification engine that acts as a production **Model Context Protocol (MCP) Client**. It coordinates **eight** specialized EDA MCP servers (review, verilog, cocotb, yosys, openroad, gds, formal, fpga) to autonomously take digital RTL designs from Verilog to verified GDSII physical layout with automated static timing analysis (STA) and self-healing parameter optimization.
 
@@ -94,6 +114,8 @@ asic doctor
 ```
 
 ### 2. Run the Deterministic Golden Demo
+
+The recorded dashboard below illustrates the CLI report. Its `TAPE-OUT READY` label means the software pipeline gates passed for that example; manufacturing qualification requires separate technology, verification, and signoff evidence.
 ```bash
 asic demo
 ```
